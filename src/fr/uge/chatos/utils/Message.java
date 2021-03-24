@@ -10,7 +10,7 @@ public class Message {
         this.login = Objects.requireNonNull(login);
     }
 
-    public void setMessage(String message) {
+    public void setContent(String message) {
         this.message = Objects.requireNonNull(message);
     }
 
@@ -18,7 +18,7 @@ public class Message {
         return login;
     }
 
-    public String getMessage() {
+    public String getContent() {
         return message;
     }
 }

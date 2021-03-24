@@ -4,7 +4,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedList;
 import java.util.Objects;
+import java.util.Queue;
+
+import fr.uge.chatos.reader.MessageReader;
+import fr.uge.chatos.reader.Reader;
+import fr.uge.chatos.utils.Message;
 
 /**
  *
@@ -16,13 +24,59 @@ public class Context {
     private final ByteBuffer bufferOut = ByteBuffer.allocateDirect(Server.MAX_BUFFER_SIZE);
     private final Server server;
     private boolean closed;
+    private final Queue<Message> queue = new LinkedList<>();
+    private final MessageReader messageReader;
+    private static final Charset UTF8 = StandardCharsets.UTF_8;
 
     public Context(Server server, SelectionKey key) {
         this.key = Objects.requireNonNull(key);
         socket = (SocketChannel) key.channel();
         this.server = Objects.requireNonNull(server);
+        messageReader = new MessageReader();
     }
 
+    /**
+     * Process the content of bbin
+     *
+     * The convention is that bbin is in write-mode before the call
+     * to process and after the call
+     *
+     */
+    private void processIn() {
+    	for(;;) {
+    		Reader.ProcessStatus status = messageReader.processData(bufferIn);
+			switch (status){
+			case DONE:
+				Message msg = messageReader.get();
+				server.broadcast(msg);
+				messageReader.reset();
+				break;
+			case REFILL:
+				return;
+			case ERROR:
+				silentlyClose();
+				return;
+			}
+		}
+	}
+    
+    void queueMessage(Message msg) {
+		queue.add(msg);
+		processOut();
+		updateInterestOps();
+	}
+    
+    private void processOut() {
+		if (!queue.isEmpty()) {
+			var login = UTF8.encode(queue.peek().getLogin()); //encode doesn't change position
+			var msg = UTF8.encode(queue.peek().getContent());
+			if(bufferOut.remaining()>=2*Integer.BYTES + msg.remaining() + login.remaining()) {
+				bufferOut.putInt(login.remaining()).put(login).putInt(msg.remaining()).put(msg);
+				queue.poll();
+			}
+		}
+	}
+    
     /**
      * Performs the read action on {@code socket}.
      * <p>

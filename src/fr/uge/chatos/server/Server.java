@@ -10,6 +10,8 @@ import java.nio.channels.ServerSocketChannel;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import fr.uge.chatos.utils.Message;
+
 /**
  *
  */
@@ -98,4 +100,15 @@ public class Server {
             silentlyClose(key);
         }
     }
+
+	void broadcast(Message msg) {
+		// TODO
+		for(var key: selector.keys()) {
+			var context = (Context) key.attachment();
+			if (context == null) {
+				continue;
+			}
+			context.queueMessage(msg);
+		}
+	}
 }

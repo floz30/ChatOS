@@ -4,6 +4,16 @@ import fr.uge.chatos.utils.Message;
 
 import java.nio.ByteBuffer;
 
+/**
+ * This class allows us to parse a packet in this format
+ * int ; String ; int ; String
+ * TODO: ajouter le byte qui correspond à l'opération
+ * 
+ * @author michel
+ *
+ */
+
+
 public class MessageReader implements Reader<Message> {
     private enum State {DONE, WAITING_LOGIN, WAITING_MSG, ERROR}
     private final StringReader sr = new StringReader();
@@ -39,7 +49,7 @@ public class MessageReader implements Reader<Message> {
         // Get message content
         switch (sr.processData(buffer)) {
             case DONE:
-                message.setMessage(sr.get());
+                message.setContent(sr.get());
                 currentState = State.DONE;
                 sr.reset();
                 break;
