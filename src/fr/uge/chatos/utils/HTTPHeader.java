@@ -1,4 +1,4 @@
-package fr.uge.chatos.http;
+package fr.uge.chatos.utils;
 
 public class HTTPHeader {
 }
