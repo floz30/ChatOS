@@ -43,7 +43,8 @@ public class Server {
             var clientKey = sc.register(selector, SelectionKey.OP_READ);
             clientKey.attach(new Context(this, clientKey));
         } else {
-            logger.warning("The selector was wrong.");
+            logger.info("The selector was wrong.");
+            return;
         }
     }
 

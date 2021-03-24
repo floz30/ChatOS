@@ -16,10 +16,32 @@ import java.nio.ByteBuffer;
 
 public class MessageReader implements Reader<Message> {
     private enum State {DONE, WAITING_LOGIN, WAITING_MSG, ERROR}
+    private final ByteReader br = new ByteReader();
     private final StringReader sr = new StringReader();
     private Message message = new Message();
     private State currentState = State.WAITING_LOGIN;
 
+    
+    private void treatOps(byte operation) {
+    	var op = Byte.toUnsignedInt(operation);
+    	//TODO
+    	switch(op) {
+    	case 99:
+    	case 1:
+    	}
+    }
+    
+    private ProcessStatus processOperation(ByteBuffer buffer) {
+    	if (currentState == State.DONE || currentState == State.ERROR) {
+            throw new IllegalStateException();
+        }
+    	
+    	switch(br.processData(buffer)) {
+    	case DONE:
+    		treatOps(br.get());
+    	}
+    }
+    
     @Override
     public ProcessStatus processData(ByteBuffer buffer) {
         if (currentState == State.DONE || currentState == State.ERROR) {

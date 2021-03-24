@@ -12,6 +12,7 @@ import java.util.Queue;
 
 import fr.uge.chatos.reader.MessageReader;
 import fr.uge.chatos.reader.Reader;
+import fr.uge.chatos.reader.StringReader;
 import fr.uge.chatos.utils.Message;
 
 /**
@@ -26,7 +27,9 @@ public class Context {
     private boolean closed;
     private final Queue<Message> queue = new LinkedList<>();
     private final MessageReader messageReader;
+    private final Reader<String> connectionRequest = new StringReader();
     private static final Charset UTF8 = StandardCharsets.UTF_8;
+    private String login;
 
     public Context(Server server, SelectionKey key) {
         this.key = Objects.requireNonNull(key);
@@ -36,19 +39,20 @@ public class Context {
     }
 
     /**
-     * Process the content of bbin
-     *
-     * The convention is that bbin is in write-mode before the call
-     * to process and after the call
-     *
+     * Process the content of {@code bufferIn}.
+     * <p>
+     * Note: {@code bufferIn} is in <b>write-mode</b> before and after the call.
+     * </p>
      */
     private void processIn() {
     	for(;;) {
     		Reader.ProcessStatus status = messageReader.processData(bufferIn);
 			switch (status){
 			case DONE:
+				
 				Message msg = messageReader.get();
 				server.broadcast(msg);
+				login = msg.getLogin();
 				messageReader.reset();
 				break;
 			case REFILL:
@@ -66,6 +70,12 @@ public class Context {
 		updateInterestOps();
 	}
     
+    /**
+     * Process the content of {@code bufferOut}.
+     * <p>
+     * Note: {@code bufferOut} is in <b>write-mode</b> before and after the call.
+     * </p>
+     */
     private void processOut() {
 		if (!queue.isEmpty()) {
 			var login = UTF8.encode(queue.peek().getLogin()); //encode doesn't change position
@@ -90,7 +100,7 @@ public class Context {
         if (socket.read(bufferIn) == -1) {
             closed = true;
         }
-        processBufferIn();
+        processIn();
         updateInterestOps();
     }
 
@@ -106,28 +116,8 @@ public class Context {
         bufferOut.flip();
         socket.write(bufferOut);
         bufferOut.compact();
-        processBufferOut();
+        processOut();
         updateInterestOps();
-    }
-
-    /**
-     * Process the content of {@code bufferIn}.
-     * <p>
-     * Note: {@code bufferIn} is in <b>write-mode</b> before and after the call.
-     * </p>
-     */
-    private void processBufferIn() {
-
-    }
-
-    /**
-     * Process the content of {@code bufferOut}.
-     * <p>
-     * Note: {@code bufferOut} is in <b>write-mode</b> before and after the call.
-     * </p>
-     */
-    private void processBufferOut() {
-
     }
 
     /**
