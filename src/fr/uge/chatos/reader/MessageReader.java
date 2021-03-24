@@ -22,6 +22,7 @@ public class MessageReader implements Reader<Message> {
                 case DONE:
                     message.setLogin(sr.get());
                     currentState = State.WAITING_MSG;
+                    sr.reset();
                     break;
                 case REFILL:
                     return ProcessStatus.REFILL;
@@ -30,17 +31,17 @@ public class MessageReader implements Reader<Message> {
                     return ProcessStatus.ERROR;
             }
         }
-
+        //on a fini de lire le login : tout état qui n'est pas DONE doit être un cas échéant.
         if (currentState != State.WAITING_MSG) {
             return ProcessStatus.ERROR;
         }
 
         // Get message content
-        sr.reset();
         switch (sr.processData(buffer)) {
             case DONE:
                 message.setMessage(sr.get());
                 currentState = State.DONE;
+                sr.reset();
                 break;
             case REFILL:
                 return ProcessStatus.REFILL;
@@ -48,7 +49,6 @@ public class MessageReader implements Reader<Message> {
                 currentState = State.ERROR;
                 return ProcessStatus.ERROR;
         }
-        sr.reset();
         return ProcessStatus.DONE;
     }
 
