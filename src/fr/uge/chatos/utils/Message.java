@@ -3,16 +3,21 @@ package fr.uge.chatos.utils;
 import java.util.Objects;
 
 public class Message {
+    /**
+     * Expeditor username
+     */
     private String login;
     private String content;
+    private boolean mp;
 
     public Message() {
 
     }
 
-    public Message(String login, String content) {
+    public Message(String login, String content, boolean mp) {
         this.login = Objects.requireNonNull(login);
         this.content = Objects.requireNonNull(content);
+        this.mp = mp;
     }
 
     public void setLogin(String login) {
@@ -29,5 +34,9 @@ public class Message {
 
     public String getContent() {
         return content;
+    }
+
+    public boolean isMp() {
+        return mp;
     }
 }

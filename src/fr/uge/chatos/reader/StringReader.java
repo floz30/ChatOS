@@ -41,14 +41,18 @@ public class StringReader implements Reader<String> {
         // Get Content
         buffer.flip();
         try {
-            if (buffer.remaining() <= internalBuffer.remaining()) {
-                internalBuffer.put(buffer);
-            } else {
-                var oldLimit = buffer.limit();
-                buffer.limit(buffer.position() + buffer.remaining());
-                buffer.put(buffer);
-                buffer.limit(oldLimit);
-            }
+            var oldLimit = buffer.limit();
+            buffer.limit(size);
+            internalBuffer.put(buffer);
+            buffer.limit(oldLimit);
+//            if (buffer.remaining() <= internalBuffer.remaining()) {
+//                internalBuffer.put(buffer);
+//            } else {
+//                var oldLimit = buffer.limit();
+//                buffer.limit(buffer.position() + internalBuffer.remaining());
+//                internalBuffer.put(buffer);
+//                buffer.limit(oldLimit);
+//            }
         } finally {
             buffer.compact();
         }
@@ -56,10 +60,13 @@ public class StringReader implements Reader<String> {
         if (size > internalBuffer.position()) {
             return ProcessStatus.REFILL;
         }
-        currentState = State.DONE;
         internalBuffer.flip();
+//        var oldLimit = internalBuffer.limit();
+//        internalBuffer.limit(size);
         value = charset.decode(internalBuffer).toString();
+        //internalBuffer.limit(oldLimit);
 
+        currentState = State.DONE;
         return ProcessStatus.DONE;
     }
 

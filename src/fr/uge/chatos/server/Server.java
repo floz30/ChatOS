@@ -104,15 +104,36 @@ public class Server {
 
     /**
      * Send a message to all client connected.
-     * @param msg Message to send.
+     *
+     * @param message Message to send.
      */
-	void broadcast(Message msg) {
-		for(var key: selector.keys()) {
+	void broadcast(Message message) {
+		for (var key: selector.keys()) {
 			var context = (Context) key.attachment();
 			if (context == null) {
 				continue;
 			}
-			context.queueMessage(msg);
+			context.queueMessage(message);
 		}
 	}
+
+    /**
+     * Send a message to the specified client.
+     *
+     * @param message Message to send.
+     * @param loginDest Message recipient.
+     */
+	void privateMessage(Message message, String loginDest) {
+	    for (var key : selector.keys()) {
+	        var context = (Context) key.attachment();
+	        if (context == null) {
+	            continue;
+            }
+	        // TODO : avertir l'expéditeur si le destinataire est déconnecté
+	        if (loginDest.equals(context.getLogin()) && context.isStillConnected()) {
+	            context.queueMessage(message);
+	            return;
+            }
+        }
+    }
 }

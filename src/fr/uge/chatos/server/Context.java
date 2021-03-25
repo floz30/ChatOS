@@ -44,10 +44,28 @@ public class Context {
     /**
      * Check if the client is already connected with an username.
      *
-     * @return true if the client is connected, otherwise false
+     * @return true if the client is connected, otherwise false.
      */
     private boolean isConnected() {
         return login != null;
+    }
+
+    /**
+     * Check if the client is still connected to the server.
+     *
+     * @return true if the client is connected, otherwise false.
+     */
+    boolean isStillConnected() {
+        return !closed;
+    }
+
+    /**
+     * Returns the login of this client.
+     *
+     * @return the username of this client.
+     */
+    public String getLogin() {
+        return login;
     }
 
     /**
@@ -73,13 +91,19 @@ public class Context {
             case 2: // Message général
                 if (isConnected()) {
                      executeReader(stringReader::processData, () -> {
-                         server.broadcast(new Message(login, stringReader.get()));
+                         server.broadcast(new Message(login, stringReader.get(), false));
                          stringReader.reset();
                      });
                 }
                 break;
             case 4: // Message privé
-                // TODO : envoie du message privé
+                if (isConnected()) {
+                    executeReader(messageReader::processData, () -> {
+                        var message = messageReader.get();
+                        server.privateMessage(new Message(login, message.getContent(), true), message.getLogin());
+                        messageReader.reset();
+                    });
+                }
                 break;
         }
     }
@@ -146,12 +170,18 @@ public class Context {
      */
     private void processOut() {
 		if (!queue.isEmpty()) {
-			var login = UTF8.encode(queue.peek().getLogin()); //encode doesn't change position
-			var msg = UTF8.encode(queue.peek().getContent());
-			if (bufferOut.remaining() >= 2*Integer.BYTES + msg.remaining() + login.remaining()) {
-				bufferOut.putInt(login.remaining()).put(login).putInt(msg.remaining()).put(msg);
-				queue.poll();
-			}
+		    var value = queue.peek();
+			var login = UTF8.encode(value.getLogin());
+			var content = UTF8.encode(value.getContent());
+            // TODO : optimiser l'ajout du byte d'opération pour le retour
+			byte op = 3;
+			if (value.isMp()) {
+			    op = 5;
+            }
+            if (bufferOut.remaining() >= Byte.BYTES + 2*Integer.BYTES + content.remaining() + login.remaining()) {
+                bufferOut.put(op).putInt(login.remaining()).put(login).putInt(content.remaining()).put(content);
+                queue.poll();
+            }
 		}
 	}
     
