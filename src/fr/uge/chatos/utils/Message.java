@@ -4,14 +4,23 @@ import java.util.Objects;
 
 public class Message {
     private String login;
-    private String message;
+    private String content;
+
+    public Message() {
+
+    }
+
+    public Message(String login, String content) {
+        this.login = Objects.requireNonNull(login);
+        this.content = Objects.requireNonNull(content);
+    }
 
     public void setLogin(String login) {
         this.login = Objects.requireNonNull(login);
     }
 
-    public void setContent(String message) {
-        this.message = Objects.requireNonNull(message);
+    public void setContent(String content) {
+        this.content = Objects.requireNonNull(content);
     }
 
     public String getLogin() {
@@ -19,6 +28,6 @@ public class Message {
     }
 
     public String getContent() {
-        return message;
+        return content;
     }
 }

@@ -74,6 +74,7 @@ public class StringReader implements Reader<String> {
     @Override
     public void reset() {
         currentState = State.WAITING_SIZE;
+        ir.reset();
         internalBuffer.clear();
         size = 0;
         value = "";

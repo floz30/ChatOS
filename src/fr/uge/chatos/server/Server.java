@@ -44,7 +44,6 @@ public class Server {
             clientKey.attach(new Context(this, clientKey));
         } else {
             logger.info("The selector was wrong.");
-            return;
         }
     }
 
@@ -53,6 +52,7 @@ public class Server {
      * @throws IOException
      */
     public void launch() throws IOException {
+        logger.info("Server started...");
         serverSocketChannel.configureBlocking(false);
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 
@@ -102,8 +102,11 @@ public class Server {
         }
     }
 
+    /**
+     * Send a message to all client connected.
+     * @param msg Message to send.
+     */
 	void broadcast(Message msg) {
-		// TODO
 		for(var key: selector.keys()) {
 			var context = (Context) key.attachment();
 			if (context == null) {
