@@ -19,7 +19,7 @@ public interface Reader <T> {
      * @return a status which indicate if the process was successful, if there is not
      * enough data in the {@code buffer} or if an error occurred
      */
-    ProcessStatus processData(ByteBuffer buffer);
+    ProcessStatus process(ByteBuffer buffer);
 
     /**
      * Returns data extracted from the buffer, only if {@code processData}
