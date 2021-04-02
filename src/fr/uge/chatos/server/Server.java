@@ -6,15 +6,18 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import fr.uge.chatos.reader.LongReader;
 import fr.uge.chatos.reader.MessageReader;
 import fr.uge.chatos.reader.Reader;
 import fr.uge.chatos.reader.StringReader;
 import fr.uge.chatos.utils.Message;
 import fr.uge.chatos.utils.Packets;
+import fr.uge.chatos.utils.PrivateConnection;
 
 import static fr.uge.chatos.utils.OpCode.*;
 
@@ -23,16 +26,31 @@ import static fr.uge.chatos.utils.OpCode.*;
  */
 public class Server {
 
-    static private class Context {
-        private static final Logger logger = Logger.getLogger(Context.class.getName());
+    private class Packet {
+        private final Message message;
+        private final ByteBuffer buffer;
+
+        Packet(Message message) {
+            this.message = message;
+            buffer = null;
+        }
+
+        Packet(ByteBuffer buffer) {
+            message = null;
+            this.buffer = buffer;
+        }
+    }
+
+    private class Context {
         private final SocketChannel socket;
         private final SelectionKey key;
         private final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
         private final ByteBuffer bufferOut = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
         private final Server server;
-        private final Queue<Message> queue = new LinkedList<>();
+        private final Queue<Packet> queue = new LinkedList<>();
         private final MessageReader messageReader = new MessageReader();
         private final StringReader stringReader = new StringReader();
+        private final LongReader longReader = new LongReader();
         private boolean closed;
         private String login;
 
@@ -91,15 +109,58 @@ public class Server {
                     });
                 case GENERAL_SENDER: // Message général
                     executeReader(stringReader::process, () -> {
-                        server.broadcast(new Message(login, stringReader.get(), false));
+                        //server.broadcast(new Message(login, stringReader.get(), false));
+                        server.broadcast(new Packet(new Message(login, stringReader.get(), false)));
                         stringReader.reset();
                     });
                     break;
                 case PRIVATE_SENDER: // Message privé
                     executeReader(messageReader::process, () -> {
                         var message = messageReader.get();
-                        server.privateMessage(new Message(login, message.getContent(), true), message.getLogin());
+                        server.privateMessage(new Packet(new Message(login, message.getContent(), true)), message.getLogin());
                         messageReader.reset();
+                    });
+                    break;
+                case PRIVATE_CONNECTION_REQUEST_SENDER: // demande de connexion privée
+                    executeReader(stringReader::process, () -> {
+                        var content = stringReader.get();
+                        var id = ThreadLocalRandom.current().nextLong();
+                        privateConnections.put(id, new PrivateConnection(login, content, id));
+
+                        var packet = new Packet(Packets.ofPrivateConnection(login, PRIVATE_CONNECTION_REQUEST_RECEIVER));
+                        server.privateMessage(packet, content);
+                        stringReader.reset();
+                    });
+                    break;
+                case PRIVATE_CONNECTION_REPLY: // confirmation connexion privée
+                    executeReader(stringReader::process, () -> {
+                        var content = stringReader.get(); // Applicant pseudo
+                        var confirm = bufferIn.get();
+                        if (confirm == 1) {
+                            var connection = privateConnections.entrySet().stream().filter(entry -> entry.getValue().getApplicant().equals(content)).findFirst();
+                            if (connection.isPresent()) {
+                                var value = connection.get();
+                                value.getValue().updateState(PrivateConnection.State.START_AUTHENTICATION);
+
+                                // envoi du port
+                                server.privateMessage(new Packet(Packets.ofPrivateConnectionSockets(value.getKey(), login, privatePort)), content);
+                                server.privateMessage(new Packet(Packets.ofPrivateConnectionSockets(value.getKey(), content, privatePort)), login);
+                            } else {
+                                // ERREUR A TRAITER
+                            }
+                        } else {
+                            // refus de connexion à traiter
+                        }
+                    });
+                    break;
+                case PRIVATE_CONNECTION_AUTHENTICATION: // authentification connexion privée
+                    executeReader(longReader::process, () -> {
+                        var content = longReader.get(); // id
+
+                        privateConnections.computeIfPresent(content, (key, value) -> {
+                            value.updateState(PrivateConnection.State.AUTHENTICATED);
+                            return value;
+                        });
                     });
                     break;
                 default:
@@ -119,7 +180,7 @@ public class Server {
          *
          * @param msg
          */
-        void queueMessage(Message msg) {
+        void queueMessage(Packet msg) {
             queue.add(msg);
             processOut();
             updateInterestOps();
@@ -136,11 +197,17 @@ public class Server {
                 var value = queue.peek();
 
                 ByteBuffer buffer;
-                if (value.isMp()) {
-                    buffer = Packets.ofMessageReader(value.getLogin(), value.getContent(), PRIVATE_RECEIVER);
-                } else {
-                    buffer = Packets.ofMessageReader(value.getLogin(), value.getContent(), GENERAL_RECEIVER);
+                if (value.message != null) { // si c'est un Message
+                    if (value.message.isMp()) {
+                        buffer = Packets.ofMessageReader(value.message.getLogin(), value.message.getContent(), PRIVATE_RECEIVER);
+                    } else {
+                        buffer = Packets.ofMessageReader(value.message.getLogin(), value.message.getContent(), GENERAL_RECEIVER);
+                    }
+
+                } else { // sinon pour une connexion privée
+                    buffer = value.buffer;
                 }
+
                 if (bufferOut.remaining() >= buffer.remaining()) {
                     bufferOut.put(buffer.flip());
                     queue.poll();
@@ -220,11 +287,14 @@ public class Server {
     private final ServerSocketChannel serverSocketChannel;
     private final Selector selector;
     private final HashSet<String> logins = new HashSet<>(); // à changer si thread
+    private final HashMap<Long, PrivateConnection> privateConnections = new HashMap<>();
+    private final int privatePort;
 
-    public Server(int port) throws IOException {
-        if (port <= 0) {
+    public Server(int port, int privatePort) throws IOException {
+        if (port <= 0 || privatePort < 0) {
             throw new IllegalArgumentException("port number can't be negative");
         }
+        this.privatePort = privatePort;
         serverSocketChannel = ServerSocketChannel.open();
         serverSocketChannel.bind(new InetSocketAddress(port));
         selector = Selector.open();
@@ -315,7 +385,7 @@ public class Server {
      *
      * @param message Message to send.
      */
-	void broadcast(Message message) {
+	void broadcast(Packet message) {
 		for (var key: selector.keys()) {
 			var context = (Context) key.attachment();
 			if (context == null) {
@@ -331,7 +401,7 @@ public class Server {
      * @param message Message to send.
      * @param loginDest Message recipient.
      */
-	void privateMessage(Message message, String loginDest) {
+	void privateMessage(Packet message, String loginDest) {
 	    for (var key : selector.keys()) {
 	        var context = (Context) key.attachment();
 	        if (context == null) {
@@ -344,6 +414,16 @@ public class Server {
             }
         }
     }
+
+    private void privateConnection() {
+
+    }
+
+
+    ///////////////
+    // A retirer //
+    ///////////////
+
 
     private String interestOpsToString(SelectionKey key){
         if (!key.isValid()) {
