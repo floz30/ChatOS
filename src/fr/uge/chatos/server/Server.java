@@ -17,7 +17,6 @@ import fr.uge.chatos.reader.Reader;
 import fr.uge.chatos.reader.StringReader;
 import fr.uge.chatos.utils.Message;
 import fr.uge.chatos.utils.Packets;
-import fr.uge.chatos.utils.PrivateConnection;
 
 import static fr.uge.chatos.utils.OpCode.*;
 
@@ -52,7 +51,12 @@ public class Server {
         private final StringReader stringReader = new StringReader();
         private final LongReader longReader = new LongReader();
         private boolean closed;
+        
         private String login;
+        
+        private boolean privateCo;
+        private long privateId;
+        private String dst;
 
         public Context(Server server, SelectionKey key) {
             this.key = Objects.requireNonNull(key);
@@ -121,35 +125,35 @@ public class Server {
                         messageReader.reset();
                     });
                     break;
+                    
                 case PRIVATE_CONNECTION_REQUEST_SENDER: // demande de connexion privée
-                    executeReader(stringReader::process, () -> {
-                        var content = stringReader.get();
-                        var id = ThreadLocalRandom.current().nextLong();
-                        privateConnections.put(id, new PrivateConnection(login, content, id));
-
-                        var packet = new Packet(Packets.ofPrivateConnection(login, PRIVATE_CONNECTION_REQUEST_RECEIVER));
-                        server.privateMessage(packet, content);
-                        stringReader.reset();
+                    executeReader(messageReader::process, () -> {
+                        var dst = messageReader.get().getLogin();
+                        if (server.logins.contains(dst)) {
+                            var packet = new Packet(Packets.ofPrivateConnection(login, PRIVATE_CONNECTION_REQUEST_RECEIVER));
+                            server.privateMessage(packet, dst);
+                            stringReader.reset();
+                        }
+                        else {
+                            // renvoyer un packet d'erreur
+                            // TODO: changer la RFC pour supporter 2 types de packet d'erreur
+                        }
                     });
                     break;
                 case PRIVATE_CONNECTION_REPLY: // confirmation connexion privée
                     executeReader(stringReader::process, () -> {
-                        var content = stringReader.get(); // Applicant pseudo
-                        var confirm = bufferIn.get();
-                        if (confirm == 1) {
-                            var connection = privateConnections.entrySet().stream().filter(entry -> entry.getValue().getApplicant().equals(content)).findFirst();
-                            if (connection.isPresent()) {
-                                var value = connection.get();
-                                value.getValue().updateState(PrivateConnection.State.START_AUTHENTICATION);
-
-                                // envoi du port
-                                server.privateMessage(new Packet(Packets.ofPrivateConnectionSockets(value.getKey(), login, privatePort)), content);
-                                server.privateMessage(new Packet(Packets.ofPrivateConnectionSockets(value.getKey(), content, privatePort)), login);
-                            } else {
-                                // ERREUR A TRAITER
-                            }
-                        } else {
-                            // refus de connexion à traiter
+                        var reply = bufferIn.flip().get();
+                        bufferIn.compact();
+                        if (reply == 1) {
+                            var dst = stringReader.get();
+                            var privateId = ThreadLocalRandom.current().nextLong();
+                            server.privateMessage(
+                                    new Packet(Packets.ofPrivateConnectionSockets(privateId, login)), dst);
+                            server.privateMessage(
+                                    new Packet(Packets.ofPrivateConnectionSockets(privateId, dst)), login);
+                        }
+                        else {
+                            //refus
                         }
                     });
                     break;
@@ -157,10 +161,10 @@ public class Server {
                     executeReader(longReader::process, () -> {
                         var content = longReader.get(); // id
 
-                        privateConnections.computeIfPresent(content, (key, value) -> {
-                            value.updateState(PrivateConnection.State.AUTHENTICATED);
-                            return value;
-                        });
+//                        privateConnections.computeIfPresent(content, (key, value) -> {
+//                            value.updateState(PrivateConnection.State.AUTHENTICATED);
+//                            return value;
+//                        });
                     });
                     break;
                 default:
@@ -286,15 +290,13 @@ public class Server {
     private static final Logger logger = Logger.getLogger(Server.class.getName());
     private final ServerSocketChannel serverSocketChannel;
     private final Selector selector;
-    private final HashSet<String> logins = new HashSet<>(); // à changer si thread
-    private final HashMap<Long, PrivateConnection> privateConnections = new HashMap<>();
-    private final int privatePort;
+    private final HashSet<String> logins = new HashSet<>();
 
-    public Server(int port, int privatePort) throws IOException {
-        if (port <= 0 || privatePort < 0) {
+    public Server(int port) throws IOException {
+        if (port <= 0) {
             throw new IllegalArgumentException("port number can't be negative");
         }
-        this.privatePort = privatePort;
+        
         serverSocketChannel = ServerSocketChannel.open();
         serverSocketChannel.bind(new InetSocketAddress(port));
         selector = Selector.open();
@@ -385,15 +387,15 @@ public class Server {
      *
      * @param message Message to send.
      */
-	void broadcast(Packet message) {
-		for (var key: selector.keys()) {
-			var context = (Context) key.attachment();
-			if (context == null) {
-				continue;
-			}
-			context.queueMessage(message);
-		}
-	}
+    void broadcast(Packet message) {
+        for (var key: selector.keys()) {
+            var context = (Context) key.attachment();
+            if (context == null) {
+                continue;
+            }
+            context.queueMessage(message);
+        }
+    }
 
     /**
      * Send a message to the specified client.
@@ -401,22 +403,18 @@ public class Server {
      * @param message Message to send.
      * @param loginDest Message recipient.
      */
-	void privateMessage(Packet message, String loginDest) {
-	    for (var key : selector.keys()) {
-	        var context = (Context) key.attachment();
-	        if (context == null) {
-	            continue;
+    void privateMessage(Packet message, String loginDest) {
+        for (var key : selector.keys()) {
+            var context = (Context) key.attachment();
+            if (context == null) {
+                continue;
             }
-	        // TODO : avertir l'expéditeur si le destinataire est déconnecté
-	        if (loginDest.equals(context.login) && !context.closed) {
-	            context.queueMessage(message);
-	            return;
+            // TODO : avertir l'expéditeur si le destinataire est déconnecté
+            if (loginDest.equals(context.login) && !context.closed) {
+                context.queueMessage(message);
+                return;
             }
         }
-    }
-
-    private void privateConnection() {
-
     }
 
 

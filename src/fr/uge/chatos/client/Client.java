@@ -4,7 +4,6 @@ import fr.uge.chatos.reader.MessageReader;
 import fr.uge.chatos.reader.Reader;
 import fr.uge.chatos.reader.StringReader;
 import fr.uge.chatos.utils.Packets;
-import fr.uge.chatos.utils.PrivateConnection;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -106,10 +105,10 @@ public class Client {
                 }
                 case PRIVATE_CONNECTION_REQUEST_RECEIVER -> {
                     processReader(stringReader::process, () -> {
-                        var content = stringReader.get();
-                        var msg = "[** Demande de connexion privée reçue de la part de "+ content +" **]"
-                                + "\n\tPour accepter => /"+ content +" oui"
-                                + "\n\tPour refuser => /"+ content +" non";
+                        var dst = stringReader.get();
+                        var msg = "[** Demande de connexion privée reçue de la part de "+ dst +" **]"
+                                + "\n\tPour accepter => /"+ dst +" oui"
+                                + "\n\tPour refuser => /"+ dst +" non";
                         System.out.println(msg);
                         stringReader.reset();
                     });
@@ -251,7 +250,6 @@ public class Client {
     private final Thread console;
     private final String login;
     private final Object lock = new Object();
-    private final HashMap<String, PrivateConnection> privateConnections = new HashMap<>();
     private final Path repository;
     private Context uniqueContext;
 
@@ -294,12 +292,12 @@ public class Client {
     }
 
     private static class Command {
-        private final String recipient;
+        private final String dst;
         private final String content;
         private final boolean isMessage;
 
-        Command(String recipient, String content, boolean isMessage) {
-            this.recipient = recipient;
+        Command(String dst, String content, boolean isMessage) {
+            this.dst = dst;
             this.content = content;
             this.isMessage = isMessage;
         }
@@ -315,18 +313,36 @@ public class Client {
         Objects.requireNonNull(message);
         String recipient, content;
         boolean isMessage = true;
-        if (message.startsWith("@") || message.startsWith("/")) { // connexion privée
+        if (message.startsWith("@") || message.startsWith("/")) {
             var elements = message.split(" ", 2);
             recipient = elements[0].substring(1);
             content = elements[1];
             if (elements[0].charAt(0) == '/') {
                 isMessage = false;
             }
-        } else { // message général
+        } else {
             recipient = null;
             content = message;
         }
         return new Command(recipient, content, isMessage);
+    }
+    
+
+    private ByteBuffer parseCommand(Command cmd) {
+        if (cmd.isMessage) {
+            if (cmd.dst != null) { // message privé
+                return Packets.ofPrivateMessage(cmd.dst, cmd.dst);
+            } else { // message général
+                return Packets.ofPublicMessage(cmd.content);
+            }
+        } else {
+            if (cmd.content.equals("oui") || cmd.content.equals("non")) { // si confirmation de la connexion
+                var reply = cmd.content.equals("oui") ? (byte) 1 : (byte) 0;
+                return Packets.ofPrivateConnectionReply(cmd.dst, reply);
+            } else { // sinon demande de connexion
+                return Packets.ofPrivateConnection(cmd.dst, PRIVATE_CONNECTION_REQUEST_SENDER);
+            }
+        }
     }
 
     /**
@@ -339,36 +355,8 @@ public class Client {
                 if (tmp == null) {
                     return;
                 }
-                ByteBuffer buffer;
                 var cmd = extractCommand(tmp);
-                if (cmd.isMessage) {
-                    if (cmd.recipient != null) { // message privé
-                        buffer = Packets.ofPrivateMessage(cmd.recipient, cmd.recipient);
-                    } else { // message général
-                        buffer = Packets.ofPublicMessage(cmd.content);
-                    }
-                } else { // connexion privée
-                    var p = privateConnections.get(cmd.recipient);
-                    if (p == null) { // si pas de connexion existante
-                        if (cmd.content.equals("oui") || cmd.content.equals("non")) { // si confirmation de la connexion
-                            var confirm = cmd.content.equals("oui") ? (byte) 1 : (byte) 0;
-                            buffer = Packets.ofPrivateConnectionReply(cmd.recipient, confirm);
-                            privateConnections.put(cmd.recipient, new PrivateConnection(cmd.recipient));
-                        } else { // sinon demande de connexion
-                            buffer = Packets.ofPrivateConnection(cmd.recipient, PRIVATE_CONNECTION_REQUEST_SENDER);
-                        }
-                    } else {
-                        if (p.getCurrentState() == PrivateConnection.State.AUTHENTICATED) {
-                            // si déjà authentifié
-                            buffer = ByteBuffer.allocate(5);
-                        } else {
-                            // si en cours d'authentification
-                            // attente de la réposne
-                            buffer = ByteBuffer.allocate(6);
-                        }
-                    }
-
-                }
+                var buffer = parseCommand(cmd);
                 uniqueContext.queueMessage(buffer.flip());
                 commandQueue.poll();
             }

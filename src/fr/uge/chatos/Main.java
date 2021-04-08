@@ -22,6 +22,6 @@ public class Main {
         }
 
         // Start server
-        new Server(port, privatePort).launch();
+        new Server(port).launch();
     }
 }

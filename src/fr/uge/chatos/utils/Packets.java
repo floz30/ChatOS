@@ -95,16 +95,20 @@ public class Packets {
      * Create a ByteBuffer : byte | int | string.
      * OpCode = 6 or 7.
      *
-     * @param recipient
-     * @param opCOde
+     * @param src
+     * @param opCode
+     * @param content
      * @return
      */
-    public static ByteBuffer ofPrivateConnection(String recipient, byte opCOde) {
-        var recipientBuffer = charset.encode(recipient);
-        var result = ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + recipientBuffer.remaining());
-        result.put(opCOde)
-                .putInt(recipientBuffer.remaining())
-                .put(recipientBuffer);
+    public static ByteBuffer ofPrivateConnection(String src, byte opCode) {
+        var srcbb = charset.encode(src);
+       
+        var result = ByteBuffer.allocate(Byte.BYTES 
+                + Integer.BYTES 
+                + srcbb.remaining());
+        result.put(opCode)
+                .putInt(srcbb.remaining())
+                .put(srcbb);
         return result;
     }
 
@@ -117,7 +121,9 @@ public class Packets {
      */
     public static ByteBuffer ofPrivateConnectionReply(String recipient, byte reply) {
         var recipientBuffer = charset.encode(recipient);
-        var result = ByteBuffer.allocate(2*Byte.BYTES + Integer.BYTES + recipientBuffer.remaining());
+        var result = ByteBuffer.allocate(2*Byte.BYTES 
+                + Integer.BYTES 
+                + recipientBuffer.remaining());
         result.put(OpCode.PRIVATE_CONNECTION_REPLY)
                 .putInt(recipientBuffer.remaining())
                 .put(recipientBuffer)
@@ -126,21 +132,23 @@ public class Packets {
     }
 
     /**
-     * Create a ByteBuffer : byte | string | long | int.
+     * Create a ByteBuffer : byte | string | long.
      * OpCode = 9.
      *
      * @param id
      * @param port
      * @return
      */
-    public static ByteBuffer ofPrivateConnectionSockets(long id, String recipient, int port) {
-        var recipientBuffer = charset.encode(recipient);
-        var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + Long.BYTES + recipientBuffer.remaining());
+    public static ByteBuffer ofPrivateConnectionSockets(long id, String dst) {
+        var recipientBuffer = charset.encode(dst);
+        var result = ByteBuffer.allocate(Byte.BYTES 
+                + Integer.BYTES 
+                + Long.BYTES 
+                + recipientBuffer.remaining());
         result.put(OpCode.PRIVATE_CONNECTION_SOCKETS)
                 .putInt(recipientBuffer.remaining())
                 .put(recipientBuffer)
-                .putLong(id)
-                .putInt(port);
+                .putLong(id);
         return result;
     }
 
