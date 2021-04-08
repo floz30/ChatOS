@@ -10,6 +10,7 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channel;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -34,9 +35,10 @@ public class Client {
         private final StringReader stringReader = new StringReader();
         private final MessageReader messageReader = new MessageReader();
         private boolean closed;
+        
 
         public Context(SelectionKey key) {
-            this.key = Objects.requireNonNull(key);
+            this.key = key;
             socket = (SocketChannel) key.channel();
         }
 
@@ -122,8 +124,7 @@ public class Client {
                             bufferIn.compact();
                             System.out.println("[Début de la phase d'authentification de la connexion privée...]");
                             privateConnections.put(id, dst);
-                            queueMessage(Packets.ofAuthentication(id, dst));
-                            
+                            startPrivateConnection(id, dst);
                             stringReader.reset();
                         }
                     });
@@ -249,6 +250,7 @@ public class Client {
     private final Object lock = new Object();
     private final Path repository;
     private Context uniqueContext;
+    
     private final HashMap<Long, String> privateConnections = new HashMap<>();
 
     public Client(String login, InetSocketAddress serverAddress, String repository) throws IOException {
@@ -309,27 +311,27 @@ public class Client {
      */
     private Command extractCommand(String message) {
         Objects.requireNonNull(message);
-        String recipient, content;
+        String dst, content;
         boolean isMessage = true;
         if (message.startsWith("@") || message.startsWith("/")) {
             var elements = message.split(" ", 2);
-            recipient = elements[0].substring(1);
+            dst = elements[0].substring(1);
             content = elements[1];
             if (elements[0].charAt(0) == '/') {
                 isMessage = false;
             }
         } else {
-            recipient = null;
+            dst = null;
             content = message;
         }
-        return new Command(recipient, content, isMessage);
+        return new Command(dst, content, isMessage);
     }
     
 
     private ByteBuffer parseCommand(Command cmd) {
         if (cmd.isMessage) {
             if (cmd.dst != null) { // message privé
-                return Packets.ofPrivateMessage(cmd.dst, cmd.dst);
+                return Packets.ofPrivateMessage(cmd.dst, cmd.content);
             } else { // message général
                 return Packets.ofPublicMessage(cmd.content);
             }
@@ -337,7 +339,10 @@ public class Client {
             if (cmd.content.equals("oui") || cmd.content.equals("non")) { // si confirmation de la connexion
                 var reply = cmd.content.equals("oui") ? (byte) 1 : (byte) 0;
                 return Packets.ofPrivateConnectionReply(cmd.dst, reply);
-            } else { // sinon demande de connexion
+            } else {
+                if (privateConnections.containsValue(cmd.dst)) { // la connexion avec dst existe
+                    System.out.println("WIP HTTP");
+                }
                 return Packets.ofPrivateConnection(cmd.dst, PRIVATE_CONNECTION_REQUEST_SENDER);
             }
         }
@@ -361,6 +366,23 @@ public class Client {
         }
     }
 
+    
+    private void startPrivateConnection(long id, String dst) {
+        try {
+            var socket = SocketChannel.open();
+            socket.configureBlocking(false);
+            var key = socket.register(selector, SelectionKey.OP_CONNECT);
+            var context = new Context(key);
+            context.queueMessage(Packets.ofAuthentication(id, login, dst));
+            key.attach(context);
+            socket.connect(serverAddress);
+        }
+        catch (IOException e) {
+            logger.info("Closed channel");
+        }
+        
+    }
+    
     /**
      *
      * @throws IOException

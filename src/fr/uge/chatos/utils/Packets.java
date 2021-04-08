@@ -95,20 +95,20 @@ public class Packets {
      * Create a ByteBuffer : byte | int | string.
      * OpCode = 6 or 7.
      *
-     * @param src
+     * @param dst
      * @param opCode
      * @param content
      * @return
      */
-    public static ByteBuffer ofPrivateConnection(String src, byte opCode) {
-        var srcbb = charset.encode(src);
+    public static ByteBuffer ofPrivateConnection(String dst, byte opCode) {
+        var dstbb = charset.encode(dst);
        
         var result = ByteBuffer.allocate(Byte.BYTES 
                 + Integer.BYTES 
-                + srcbb.remaining());
+                + dstbb.remaining());
         result.put(opCode)
-                .putInt(srcbb.remaining())
-                .put(srcbb);
+                .putInt(dstbb.remaining())
+                .put(dstbb);
         return result;
     }
 
@@ -160,13 +160,16 @@ public class Packets {
      * @param recipient
      * @return
      */
-    public static ByteBuffer ofAuthentication(long id, String recipient) {
-        var recipientBuffer = charset.encode(recipient);
-        var result = ByteBuffer.allocate(Byte.BYTES + Long.BYTES + Integer.BYTES + recipientBuffer.remaining());
+    public static ByteBuffer ofAuthentication(long id, String src, String dst) {
+        var srcbb = charset.encode(src);
+        var dstbb = charset.encode(dst);
+        var result = ByteBuffer.allocate(Byte.BYTES + Long.BYTES + 2 * Integer.BYTES + dstbb.remaining() + srcbb.remaining());
         result.put(OpCode.PRIVATE_CONNECTION_AUTHENTICATION)
                 .putLong(id)
-                .putInt(recipientBuffer.remaining())
-                .put(recipientBuffer);
+                .putInt(srcbb.remaining())
+                .put(srcbb)
+                .putInt(dstbb.remaining())
+                .put(dstbb);
         return result;
     }
 

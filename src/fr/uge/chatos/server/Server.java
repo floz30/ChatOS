@@ -127,8 +127,9 @@ public class Server {
                     break;
                     
                 case PRIVATE_CONNECTION_REQUEST_SENDER: // demande de connexion privée 6
-                    executeReader(messageReader::process, () -> {
-                        var dst = messageReader.get().getLogin();
+                    executeReader(stringReader::process, () -> {
+                        var dst = stringReader.get();
+                        System.out.println("6 - log : " + login + "\ndst : " + dst);
                         if (server.logins.contains(dst)) {
                             var packet = new Packet(Packets.ofPrivateConnection(login, PRIVATE_CONNECTION_REQUEST_RECEIVER));
                             server.privateMessage(packet, dst);
@@ -154,14 +155,19 @@ public class Server {
                         }
                         else {
                             //refus
-                            
                         }
+                        stringReader.reset();
                     });
                     break;
                 case PRIVATE_CONNECTION_AUTHENTICATION: // authentification connexion privée 10
-                    executeReader(longReader::process, () -> {
-                        var content = longReader.get(); // id
-                        
+                    var id = bufferIn.flip().getLong();
+                    bufferIn.compact();
+                    executeReader(messageReader::process, () -> {
+                        var src = messageReader.get().getLogin();
+                        var dst = messageReader.get().getContent();
+                        privateCo = true;
+                        login = src;
+                        this.dst = dst;
                     });
                     break;
                 default:
