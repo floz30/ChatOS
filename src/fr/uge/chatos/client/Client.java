@@ -96,14 +96,14 @@ public class Client {
                         messageReader.reset();
                     });
                 }
-                case PRIVATE_RECEIVER -> {
+                case PRIVATE_RECEIVER -> { // 5
                     processReader(messageReader::process, () -> {
                         var msg = messageReader.get();
                         System.out.println("[Message privé de " + msg.getLogin() + "] : " + msg.getContent());
                         messageReader.reset();
                     });
                 }
-                case PRIVATE_CONNECTION_REQUEST_RECEIVER -> {
+                case PRIVATE_CONNECTION_REQUEST_RECEIVER -> { // 7
                     processReader(stringReader::process, () -> {
                         var dst = stringReader.get();
                         var msg = "[** Demande de connexion privée reçue de la part de "+ dst +" **]"
@@ -113,23 +113,20 @@ public class Client {
                         stringReader.reset();
                     });
                 }
-                case PRIVATE_CONNECTION_SOCKETS -> {
-                    bufferIn.flip();
+                case PRIVATE_CONNECTION_SOCKETS -> { // 9
                     processReader(stringReader::process, () -> {
-                        var content = stringReader.get();
-                        if (bufferIn.remaining() >= Long.BYTES + Integer.BYTES) {
+                        var dst = stringReader.get();
+                        bufferIn.flip();
+                        if (bufferIn.remaining() >= Long.BYTES) {
                             var id = bufferIn.getLong();
-                            var port = bufferIn.getInt();
                             bufferIn.compact();
                             System.out.println("[Début de la phase d'authentification de la connexion privée...]");
-                            privateConnections.computeIfPresent(content, (key, value) -> {
-                                value.setPort(port);
-                                value.setId(id);
-                                return value;
-                            });
+                            privateConnections.put(id, dst);
+                            queueMessage(Packets.ofAuthentication(id, dst));
+                            
+                            stringReader.reset();
                         }
                     });
-
                 }
             }
         }
@@ -252,6 +249,7 @@ public class Client {
     private final Object lock = new Object();
     private final Path repository;
     private Context uniqueContext;
+    private final HashMap<Long, String> privateConnections = new HashMap<>();
 
     public Client(String login, InetSocketAddress serverAddress, String repository) throws IOException {
         this.serverAddress = Objects.requireNonNull(serverAddress);
@@ -373,7 +371,6 @@ public class Client {
         uniqueContext = new Context(key);
         key.attach(uniqueContext);
         socket.connect(serverAddress);
-
         console.start();
 
         while(!Thread.interrupted()) {

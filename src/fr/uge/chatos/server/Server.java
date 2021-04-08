@@ -126,7 +126,7 @@ public class Server {
                     });
                     break;
                     
-                case PRIVATE_CONNECTION_REQUEST_SENDER: // demande de connexion privée
+                case PRIVATE_CONNECTION_REQUEST_SENDER: // demande de connexion privée 6
                     executeReader(messageReader::process, () -> {
                         var dst = messageReader.get().getLogin();
                         if (server.logins.contains(dst)) {
@@ -140,7 +140,7 @@ public class Server {
                         }
                     });
                     break;
-                case PRIVATE_CONNECTION_REPLY: // confirmation connexion privée
+                case PRIVATE_CONNECTION_REPLY: // confirmation connexion privée 8
                     executeReader(stringReader::process, () -> {
                         var reply = bufferIn.flip().get();
                         bufferIn.compact();
@@ -154,17 +154,14 @@ public class Server {
                         }
                         else {
                             //refus
+                            
                         }
                     });
                     break;
-                case PRIVATE_CONNECTION_AUTHENTICATION: // authentification connexion privée
+                case PRIVATE_CONNECTION_AUTHENTICATION: // authentification connexion privée 10
                     executeReader(longReader::process, () -> {
                         var content = longReader.get(); // id
-
-//                        privateConnections.computeIfPresent(content, (key, value) -> {
-//                            value.updateState(PrivateConnection.State.AUTHENTICATED);
-//                            return value;
-//                        });
+                        
                     });
                     break;
                 default:
