@@ -145,11 +145,10 @@ public class Packets {
     }
 
     /**
-     * Create a ByteBuffer : byte | long | int | string.
+     * Create a ByteBuffer : byte | long.
      * OpCode = 10.
      *
      * @param id
-     * @param recipient
      * @return
      */
     public static ByteBuffer ofAuthentication(long id, String recipient) {
@@ -159,6 +158,21 @@ public class Packets {
                 .putLong(id)
                 .putInt(recipientBuffer.remaining())
                 .put(recipientBuffer);
+        return result;
+    }
+
+    /**
+     * Create a ByteBuffer : byte | long | byte.
+     * OpCode = 11.
+     *
+     * @param id
+     * @return
+     */
+    public static ByteBuffer ofAuthenticationConfirmation(long id, byte confirm) {
+        var result = ByteBuffer.allocate(2*Byte.BYTES + Long.BYTES);
+        result.put(OpCode.PRIVATE_CONNECTION_CONFIRMATION)
+                .putLong(id)
+                .put(confirm);
         return result;
     }
 

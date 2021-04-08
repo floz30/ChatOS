@@ -16,4 +16,5 @@ public class OpCode {
     public static final byte PRIVATE_CONNECTION_REPLY = 8;
     public static final byte PRIVATE_CONNECTION_SOCKETS = 9;
     public static final byte PRIVATE_CONNECTION_AUTHENTICATION = 10;
+    public static final byte PRIVATE_CONNECTION_CONFIRMATION = 11;
 }
