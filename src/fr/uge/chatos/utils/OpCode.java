@@ -13,4 +13,8 @@ public class OpCode {
     public static final byte PRIVATE_RECEIVER = 5; // server -> client
     public static final byte PRIVATE_CONNECTION_REQUEST_SENDER = 6;
     public static final byte PRIVATE_CONNECTION_REQUEST_RECEIVER = 7;
+    public static final byte PRIVATE_CONNECTION_REPLY = 8;
+    public static final byte PRIVATE_CONNECTION_SOCKETS = 9;
+    public static final byte PRIVATE_CONNECTION_AUTHENTICATION = 10;
+    public static final byte PRIVATE_CONNECTION_CONFIRMATION = 11;
 }
