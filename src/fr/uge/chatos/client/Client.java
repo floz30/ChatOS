@@ -4,7 +4,7 @@ import fr.uge.chatos.reader.LongReader;
 import fr.uge.chatos.reader.MessageReader;
 import fr.uge.chatos.reader.Reader;
 import fr.uge.chatos.reader.StringReader;
-import fr.uge.chatos.utils.Packets;
+import fr.uge.chatos.packet.Packets;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -438,9 +438,9 @@ public class Client {
                 var cmd = Command.extractCommand(tmp);
                 if (cmd.isMessage) {
                     if (cmd.recipient != null) {
-                        buffer = Packets.ofPrivateMessage(cmd.recipient, cmd.content); // message privé
+                        buffer = Packets.ofPrivateMessage(login, cmd.recipient, cmd.content); // message privé
                     } else {
-                        buffer = Packets.ofPublicMessage(cmd.content); // message général
+                        buffer = Packets.ofPublicMessage(login, cmd.content); // message général
                     }
                 } else {
                     // Connexion privée

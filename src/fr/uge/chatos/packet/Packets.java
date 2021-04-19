@@ -1,4 +1,6 @@
-package fr.uge.chatos.utils;
+package fr.uge.chatos.packet;
+
+import fr.uge.chatos.utils.OpCode;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -43,12 +45,13 @@ public class Packets {
      * @param content
      * @return
      */
-    public static ByteBuffer ofPublicMessage(String content) {
+    public static ByteBuffer ofPublicMessage(String sender, String content) {
         var contentBuffer = charset.encode(content);
-        var result = ByteBuffer.allocate(Byte.BYTES + Integer.BYTES + contentBuffer.remaining());
+        var senderBuffer = charset.encode(sender);
+        var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + senderBuffer.remaining() + contentBuffer.remaining());
         result.put(OpCode.GENERAL_SENDER) // operation
-                .putInt(contentBuffer.remaining())
-                .put(contentBuffer); // content
+                .putInt(senderBuffer.remaining()).put(senderBuffer) // sender
+                .putInt(contentBuffer.remaining()).put(contentBuffer); // content
         return result;
     }
 
@@ -66,10 +69,8 @@ public class Packets {
         var expBuffer = charset.encode(exp);
         var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + contentBuffer.remaining() + expBuffer.remaining());
         result.put(opCode) // operation
-                .putInt(expBuffer.remaining())
-                .put(expBuffer)
-                .putInt(contentBuffer.remaining())
-                .put(contentBuffer); // content
+                .putInt(expBuffer.remaining()).put(expBuffer) // recipient
+                .putInt(contentBuffer.remaining()).put(contentBuffer); // content
         return result;
     }
 
@@ -81,11 +82,13 @@ public class Packets {
      * @param content
      * @return
      */
-    public static ByteBuffer ofPrivateMessage(String recipient, String content) {
+    public static ByteBuffer ofPrivateMessage(String sender, String recipient, String content) {
         var recipientBuffer = charset.encode(recipient);
         var contentBuffer = charset.encode(content);
-        var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + contentBuffer.remaining() + recipientBuffer.remaining());
+        var senderBuffer = charset.encode(sender);
+        var result = ByteBuffer.allocate(Byte.BYTES + 3*Integer.BYTES + senderBuffer.remaining() +  contentBuffer.remaining() + recipientBuffer.remaining());
         result.put(OpCode.PRIVATE_SENDER) // operation
+                .putInt(senderBuffer.remaining()).put(senderBuffer) // sender
                 .putInt(recipientBuffer.remaining()).put(recipientBuffer) // recipient
                 .putInt(contentBuffer.remaining()).put(contentBuffer); // content
         return result;
