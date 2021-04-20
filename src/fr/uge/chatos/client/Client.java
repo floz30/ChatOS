@@ -1,10 +1,10 @@
 package fr.uge.chatos.client;
 
-import fr.uge.chatos.reader.LongReader;
-import fr.uge.chatos.reader.MessageReader;
-import fr.uge.chatos.reader.Reader;
-import fr.uge.chatos.reader.StringReader;
+import fr.uge.chatos.packet.Packet;
+import fr.uge.chatos.packet.PCData;
+import fr.uge.chatos.reader.*;
 import fr.uge.chatos.packet.Packets;
+import fr.uge.chatos.visitor.ClientPacketVisitor;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -27,22 +27,23 @@ import static fr.uge.chatos.utils.OpCode.*;
 
 public class Client {
 
-    private static abstract class Context {
+    public static abstract class Context {
         protected final SocketChannel socket;
         protected final SelectionKey key;
         protected final Client client;
         protected final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
         protected final ByteBuffer bufferOut = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
         protected final Queue<ByteBuffer> queue = new LinkedList<>();
-        protected final LongReader longReader = new LongReader();
-        protected final StringReader stringReader = new StringReader();
-        protected final MessageReader messageReader = new MessageReader();
+        protected final ClientPacketReader clientPacketReader = new ClientPacketReader();
+        protected final ClientPacketVisitor visitor;
         private boolean closed;
+        //private boolean authenticated = false;
 
         private Context(SelectionKey key, Client client) {
             this.key = Objects.requireNonNull(key);
             this.socket = (SocketChannel) key.channel();
             this.client = Objects.requireNonNull(client);
+            visitor = new ClientPacketVisitor(client, this);
         }
 
         /**
@@ -51,7 +52,20 @@ public class Client {
          * Note: {@code bufferIn} is in <b>write-mode</b> before and after the call.
          * </p>
          */
-        abstract void processIn();
+        void processIn() {
+            for (;;) {
+                var status = clientPacketReader.process(bufferIn);
+                switch (status) {
+                    case ERROR -> silentlyClose();
+                    case REFILL -> { return; }
+                    case DONE -> {
+                        var packet = clientPacketReader.get();
+                        clientPacketReader.reset();
+                        treatPacket(packet);
+                    }
+                }
+            }
+        }
 
         /**
          * Process the content of {@code bufferOut}.
@@ -59,7 +73,17 @@ public class Client {
          * Note: {@code bufferOut} is in <b>write-mode</b> before and after the call.
          * </p>
          */
-        abstract void processOut();
+        void processOut() {
+            while (!queue.isEmpty()) {
+                var buffer = queue.peek();
+                if (buffer.remaining() <= bufferOut.remaining()) {
+                    queue.remove();
+                    bufferOut.put(buffer);
+                } else {
+                    break;
+                }
+            }
+        }
 
         /**
          *
@@ -148,6 +172,12 @@ public class Client {
             } catch (IOException ignored) { }
         }
 
+
+
+        void treatPacket(Packet packet) {
+            packet.accept(visitor);
+        }
+
         /**
          * Update the interestOps of the key looking only at values of the boolean
          * closed and of both ByteBuffers.
@@ -179,94 +209,16 @@ public class Client {
         }
 
         @Override
-        void processIn() {
-            bufferIn.flip();
-            var op = bufferIn.get();
-            bufferIn.compact();
-
-            switch (op) {
-                case ERROR -> {
-                    processReader(stringReader::process, () -> {
-                        var content = stringReader.get();
-                        System.out.println("Erreur : " + content);
-                        stringReader.reset();
-                        silentlyClose();
-                    });
-                }
-                case CONNECTION_ACCEPT -> {
-                    bufferIn.flip();
-                    if (bufferIn.get() == 1) {
-                        bufferIn.compact();
-                        System.out.println("Connection réussie.");
-                    }
-                }
-                case GENERAL_RECEIVER -> {
-                    processReader(messageReader::process, () -> {
-                        var msg = messageReader.get();
-                        System.out.println(msg.getLogin()+ " : " + msg.getContent());
-                        messageReader.reset();
-                    });
-                }
-                case PRIVATE_RECEIVER -> {
-                    processReader(messageReader::process, () -> {
-                        var msg = messageReader.get();
-                        System.out.println("[Message privé de " + msg.getLogin() + "] : " + msg.getContent());
-                        messageReader.reset();
-                    });
-                }
-                case PRIVATE_CONNECTION_REQUEST_RECEIVER -> {
-                    processReader(stringReader::process, () -> {
-                        var content = stringReader.get();
-                        var msg = "[** Demande de connexion privée reçue de la part de "+ content +" **]"
-                                + "\n\tPour accepter => /"+ content +" oui"
-                                + "\n\tPour refuser => /"+ content +" non";
-                        System.out.println(msg);
-                        stringReader.reset();
-                    });
-                }
-                case PRIVATE_CONNECTION_SOCKETS -> {
-                    processReader(stringReader::process, () -> {
-                        var recipient = stringReader.get();
-                        bufferIn.flip();
-                        if (bufferIn.remaining() >= Long.BYTES + Integer.BYTES) {
-                            var id = bufferIn.getLong();
-                            var port = bufferIn.getInt();
-
-                            startPrivateConnection(port, recipient, id);
-                        } else {
-                            // erreur : pas de place dans le bufferIn
-                        }
-                        stringReader.reset();
-                        bufferIn.compact();
-                    });
-                }
-            }
-        }
-
-        @Override
-        void processOut() {
-            while (!queue.isEmpty()) {
-                var buffer = queue.peek();
-                if (buffer.remaining() <= bufferOut.remaining()) {
-                    queue.remove();
-                    bufferOut.put(buffer);
-                } else {
-                    break;
-                }
-            }
-        }
-
-        @Override
         void doConnect() throws IOException {
             super.doConnect();
             queue.add(Packets.ofRequestConnection(login).flip());
         }
     }
 
-    private class ContextPrivate extends Context {
-        private State currentState = State.REQUEST;
+    public class ContextPrivate extends Context {
         private String initialRequest;
         private long id;
+        private boolean authenticated = false;
 
         ContextPrivate(SelectionKey key, Client client, long id) {
             super(key, client);
@@ -275,59 +227,15 @@ public class Client {
 
         @Override
         void processIn() {
-            if (currentState != State.AUTHENTICATED) {
-                bufferIn.flip();
-                var op = bufferIn.get();
-                bufferIn.compact();
-
-                switch (op) {
-                    case ERROR -> {
-                        processReader(stringReader::process, () -> {
-                            var content = stringReader.get();
-                            System.out.println("Erreur : " + content);
-                            stringReader.reset();
-                            silentlyClose();
-                        });
-                    }
-                    case PRIVATE_CONNECTION_CONFIRMATION -> {
-                        processReader(longReader::process, () -> {
-                            var id = longReader.get();
-                            bufferIn.flip();
-                            if (bufferIn.remaining() >= Byte.BYTES) {
-                                if (bufferIn.get() == 1 && this.id == id) {
-                                    // Récupération de la connection privée correspondante
-                                    var pc = priConnections.entrySet().stream()
-                                            .filter(entry -> entry.getValue().id == id)
-                                            .findFirst();
-                                    if (pc.isPresent()) {
-                                        var connection = pc.get();
-                                        System.out.println("Connexion privée avec "+ connection.getKey() +" établie.");
-                                        currentState = State.AUTHENTICATED;
-                                    }
-                                }
-                            }
-                            bufferIn.compact();
-                            longReader.reset();
-                        });
-                    }
-                }
+            if (authenticated) {
+                treatPacket(new PCData(bufferIn, "")); // TODO : à revoir
             } else {
-                // transmission HTTP
-                System.out.println("Transmission HTTP");
+                super.processIn();
             }
         }
 
-        @Override
-        void processOut() {
-            while (!queue.isEmpty()) {
-                var buffer = queue.peek();
-                if (buffer.remaining() <= bufferOut.remaining()) {
-                    queue.remove();
-                    bufferOut.put(buffer);
-                } else {
-                    break;
-                }
-            }
+        public void successfulAuthentication() {
+            authenticated = true;
         }
 
         @Override
@@ -337,9 +245,27 @@ public class Client {
         }
     }
 
+    public static class PC {
+        private final long id;
+        private final ContextPrivate context;
+
+        public PC(long id, ContextPrivate context) {
+            this.id = id;
+            this.context = Objects.requireNonNull(context);
+        }
+
+        public ContextPrivate getContext() {
+            return context;
+        }
+
+        public long getId() {
+            return id;
+        }
+
+    }
+
     private static final Logger logger = Logger.getLogger(Client.class.getName());
     private static final int MAX_BUFFER_SIZE = 1_024;
-    enum State {REQUEST, START_AUTHENTICATION, AUTHENTICATED, CLOSED}
     private final SocketChannel socketPublic;
     private final Selector selector;
     private final InetSocketAddress serverAddress;
@@ -349,7 +275,7 @@ public class Client {
     private final Object lock = new Object();
     private final Path repository;
     private ContextPublic contextPublic;
-    private final HashMap<String, ContextPrivate> priConnections = new HashMap<>();
+    private final HashMap<String, PC> privateConnections = new HashMap<>();
 
     public Client(String login, InetSocketAddress serverAddress, String repository) throws IOException {
         this.serverAddress = Objects.requireNonNull(serverAddress);
@@ -359,6 +285,10 @@ public class Client {
         console = new Thread(this::consoleRun);
         console.setDaemon(true);
         this.repository = Paths.get(repository);
+    }
+
+    public String getLogin() {
+        return login;
     }
 
     /**
@@ -438,14 +368,15 @@ public class Client {
                 var cmd = Command.extractCommand(tmp);
                 if (cmd.isMessage) {
                     if (cmd.recipient != null) {
-                        buffer = Packets.ofPrivateMessage(login, cmd.recipient, cmd.content); // message privé
+                        buffer = Packets.ofPrivateMessage(login, cmd.recipient, cmd.content, PRIVATE_SENDER); // message privé
                     } else {
                         buffer = Packets.ofPublicMessage(login, cmd.content); // message général
                     }
                 } else {
                     // Connexion privée
-                    var context = priConnections.get(cmd.recipient);
-                    if (context == null) { // si pas de connexion existante
+                    //var context = priConnections.get(cmd.recipient);
+                    var pc = privateConnections.get(cmd.recipient);
+                    if (pc == null) { // si pas de connexion existante
                         if (cmd.content.equals("oui") || cmd.content.equals("non")) { // si confirmation de la connexion
                             var confirm = cmd.content.equals("oui") ? (byte) 1 : (byte) 0;
                             buffer = Packets.ofPrivateConnectionReply(cmd.recipient, confirm);
@@ -455,16 +386,17 @@ public class Client {
                             //connections.put(cmd.recipient, new Connection(cmd.recipient, cmd.content));
                         }
                     } else { // sur le port privé
-                        if (context.currentState == State.AUTHENTICATED) {
+                        if (pc.getContext().authenticated) {
                             // si déjà authentifié appel du client http
-                            buffer = ByteBuffer.allocate(5);
+                            buffer = ByteBuffer.allocate(4);
+                            buffer.putInt(3);
                             System.out.println("authentifié et envoi http");
                         } else {
                             // si en cours d'authentification envoi de la réponse
-                            buffer = Packets.ofAuthentication(context.id, login);
+                            buffer = Packets.ofAuthentication(pc.getContext().id, login);
                             System.out.println("En cours d'authentification");
                         }
-                        context.queueMessage(buffer.flip());
+                        pc.getContext().queueMessage(buffer.flip());
                         commandQueue.poll();
                         continue;
                     }
@@ -476,6 +408,10 @@ public class Client {
         }
     }
 
+    public Optional<Map.Entry<String, PC>> getPrivateConnection(long id) {
+        return privateConnections.entrySet().stream().filter(entry -> entry.getValue().id == id).findFirst();
+    }
+
     /**
      * Initializes a new private connection with a new socketChannel.
      *
@@ -483,7 +419,7 @@ public class Client {
      * @param recipient The username of the recipient.
      * @param id The ID of private connection.
      */
-    private void startPrivateConnection(int port, String recipient, long id) {
+    public void startPrivateConnection(int port, String recipient, long id) {
         try {
             var socket = SocketChannel.open();
             socket.configureBlocking(false);
@@ -491,7 +427,8 @@ public class Client {
             var context = new ContextPrivate(key, this, id);
             key.attach(context);
             socket.connect(new InetSocketAddress(port));
-            priConnections.put(recipient, context);
+            //priConnections.put(recipient, context);
+            privateConnections.put(recipient, new PC(id, context));
             //context.queueMessage(Packets.ofAuthenticationConfirmation(id, (byte) 1).flip());
         } catch (IOException e) {
             logger.log(Level.WARNING, "erreur", e);

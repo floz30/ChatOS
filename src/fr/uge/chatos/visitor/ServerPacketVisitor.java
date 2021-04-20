@@ -17,7 +17,8 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(ConnectionRequest connectionRequest) {
+    public void visit(Connection connection) {
+        var connectionRequest = (ConnectionRequest) connection; // TODO : vérifier si pas plus opti
         // TODO : vérifier si pseudo déjà utilisé
         var login = connectionRequest.sender;
         context.setLogin(login);
@@ -39,7 +40,7 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PrivateConnectionRequest pcr) {
+    public void visit(PCRequest pcr) {
         pcr.sender = context.getLogin();
         if (server.checkIfPrivateConnectionExists(pcr.sender, pcr.recipient)) {
             return; // paquet ignoré car connexion déjà existante
@@ -51,7 +52,7 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PrivateConnectionSockets pcs) {
+    public void visit(PCSockets pcs) {
         pcs.port = server.getPrivatePort();
         pcs.recipient = context.getLogin();
         var pcOptional = server.getPrivateConnection(pcs.sender, pcs.recipient);
@@ -66,33 +67,36 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PrivateConnectionConfirmation pcc) {
+    public void visit(Authentication authentication) {
+        var pcc = (PCAuth) authentication;
         var pcOptional = server.getPrivateConnection(pcc.login, pcc.id);
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
             if (!pc.addNewConnection()) {
                 logger.info("Erreur : trop de client se sont connecté sur cette connexion privée.");
-                return; // erreur : trop de client se sont connecté
+                return;
             }
             pc.updateOneContext(pcc.login, context);
 
             if (pc.getNbConnection() == 2) {
                 for (var pseudo : pc.getPseudos()) {
-                    server.privateConnectionBroadcast(pcc, pseudo, pc.getId());
-                    server.successfulAuthentication(pc);
+                    server.privateConnectionBroadcast(pcc, pc, pseudo);
                 }
+                server.successfulAuthentication(pc);
                 logger.info("Envoi de la confirmation de l'établissement de la connexion privée");
             }
         }
     }
 
     @Override
-    public void visit(PrivateConnectionData privateConnectionData) {
-        var pcOptional = server.getPrivateConnection(privateConnectionData.sender, context.getKey());
+    public void visit(PCData PCData) {
+        var pcOptional = server.getPrivateConnection(PCData.sender, context.getKey());
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
-            server.privateConnectionBroadcast(privateConnectionData, privateConnectionData.sender, pc.getId());
+
+            server.privateConnectionBroadcast(PCData, pc, PCData.sender);
             logger.info("Transfert de données sur la connexion privée entre " + pc.getPseudos());
+
         }
 
     }

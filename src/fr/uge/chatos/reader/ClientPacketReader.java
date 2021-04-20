@@ -1,22 +1,23 @@
 package fr.uge.chatos.reader;
 
+import fr.uge.chatos.packet.ConnectionConfirmation;
 import fr.uge.chatos.packet.Packet;
 
 import java.nio.ByteBuffer;
 
 import static fr.uge.chatos.utils.OpCode.*;
 
-public class ServerPacketReader implements Reader<Packet> {
+public class ClientPacketReader implements Reader<Packet> {
     private enum State {DONE, WAITING_PACKET, ERROR}
+    private final ByteReader byteReader = new ByteReader();
     private final ConnectionRequestReader connectionRequestReader = new ConnectionRequestReader();
     private final PublicMessageReader publicMessageReader = new PublicMessageReader();
     private final PrivateMessageReader privateMessageReader = new PrivateMessageReader();
     private final PCRequestReader PCRequestReader = new PCRequestReader();
-    private final PCReplyReader pcrr = new PCReplyReader();
-    private final PCAuthReader pcar = new PCAuthReader();
+    private final PCSocketsReader PCSocketsReader = new PCSocketsReader();
+    private final PCAuthConfirmationReader pcar = new PCAuthConfirmationReader();
     private State currentState = State.WAITING_PACKET;
     private Packet packet;
-
 
     @Override
     public ProcessStatus process(ByteBuffer buffer) {
@@ -34,15 +35,15 @@ public class ServerPacketReader implements Reader<Packet> {
 
         var status = ProcessStatus.ERROR;
         switch (opCode) {
-            case CONNECTION_REQUEST -> {
-                status = connectionRequestReader.process(buffer);
+            case CONNECTION_ACCEPT -> {
+                status = byteReader.process(buffer); // on utilise directement un ByteReader (+ simple)
                 if (status == ProcessStatus.DONE) {
-                    packet = connectionRequestReader.get();
+                    packet = new ConnectionConfirmation(byteReader.get());
                     connectionRequestReader.reset();
                     currentState = State.DONE;
                 }
             }
-            case GENERAL_SENDER -> {
+            case GENERAL_RECEIVER -> {
                 status = publicMessageReader.process(buffer);
                 if (status == ProcessStatus.DONE) {
                     packet = publicMessageReader.get();
@@ -50,7 +51,7 @@ public class ServerPacketReader implements Reader<Packet> {
                     currentState = State.DONE;
                 }
             }
-            case PRIVATE_SENDER -> {
+            case PRIVATE_RECEIVER -> {
                 status = privateMessageReader.process(buffer);
                 if (status == ProcessStatus.DONE) {
                     packet = privateMessageReader.get();
@@ -58,7 +59,7 @@ public class ServerPacketReader implements Reader<Packet> {
                     currentState = State.DONE;
                 }
             }
-            case PRIVATE_CONNECTION_REQUEST_SENDER -> {
+            case PRIVATE_CONNECTION_REQUEST_RECEIVER -> {
                 status = PCRequestReader.process(buffer);
                 if (status == ProcessStatus.DONE) {
                     packet = PCRequestReader.get();
@@ -66,15 +67,15 @@ public class ServerPacketReader implements Reader<Packet> {
                     currentState = State.DONE;
                 }
             }
-            case PRIVATE_CONNECTION_REPLY -> {
-                status = pcrr.process(buffer);
+            case PRIVATE_CONNECTION_SOCKETS -> {
+                status = PCSocketsReader.process(buffer);
                 if (status == ProcessStatus.DONE) {
-                    packet = pcrr.get();
-                    pcrr.reset();
+                    packet = PCSocketsReader.get();
+                    PCSocketsReader.reset();
                     currentState = State.DONE;
                 }
             }
-            case PRIVATE_CONNECTION_AUTHENTICATION -> {
+            case PRIVATE_CONNECTION_CONFIRMATION -> {
                 status = pcar.process(buffer);
                 if (status == ProcessStatus.DONE) {
                     packet = pcar.get();
@@ -103,6 +104,6 @@ public class ServerPacketReader implements Reader<Packet> {
         privateMessageReader.reset();
         PCRequestReader.reset();
         pcar.reset();
-        pcrr.reset();
+        PCSocketsReader.reset();
     }
 }

@@ -1,12 +1,15 @@
 package fr.uge.chatos.reader;
 
-import fr.uge.chatos.packet.PrivateConnectionConfirmation;
+import fr.uge.chatos.packet.PCAuth;
 
 import java.nio.ByteBuffer;
 
-public class PrivateConnectionAuthenticationReader implements Reader<PrivateConnectionConfirmation> {
+/**
+ * Pour le serveur
+ */
+public class PCAuthReader implements Reader<PCAuth> {
     private enum State {DONE, WAITING_ID, WAITING_PSEUDO, ERROR}
-    private PrivateConnectionConfirmation confirmation = new PrivateConnectionConfirmation();
+    private PCAuth confirmation = new PCAuth();
     private State currentState = State.WAITING_ID;
     private final StringReader stringReader =  new StringReader();
     private final LongReader longReader = new LongReader();
@@ -21,6 +24,7 @@ public class PrivateConnectionAuthenticationReader implements Reader<PrivateConn
             switch (longReader.process(buffer)) {
                 case DONE:
                     confirmation.id = longReader.get();
+                    longReader.reset();
                     currentState = State.WAITING_PSEUDO;
                     break;
                 case REFILL:
@@ -38,6 +42,7 @@ public class PrivateConnectionAuthenticationReader implements Reader<PrivateConn
         switch (stringReader.process(buffer)) {
             case DONE:
                 confirmation.login = stringReader.get();
+                stringReader.reset();
                 currentState = State.DONE;
                 break;
             case REFILL:
@@ -50,7 +55,7 @@ public class PrivateConnectionAuthenticationReader implements Reader<PrivateConn
     }
 
     @Override
-    public PrivateConnectionConfirmation get() {
+    public PCAuth get() {
         if (currentState != State.DONE) {
             throw new IllegalStateException();
         }
@@ -62,6 +67,6 @@ public class PrivateConnectionAuthenticationReader implements Reader<PrivateConn
         currentState = State.WAITING_ID;
         stringReader.reset();
         longReader.reset();
-        confirmation = new PrivateConnectionConfirmation();
+        confirmation = new PCAuth();
     }
 }

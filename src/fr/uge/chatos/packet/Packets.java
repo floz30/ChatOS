@@ -82,12 +82,12 @@ public class Packets {
      * @param content
      * @return
      */
-    public static ByteBuffer ofPrivateMessage(String sender, String recipient, String content) {
+    public static ByteBuffer ofPrivateMessage(String sender, String recipient, String content, byte opCode) {
         var recipientBuffer = charset.encode(recipient);
         var contentBuffer = charset.encode(content);
         var senderBuffer = charset.encode(sender);
         var result = ByteBuffer.allocate(Byte.BYTES + 3*Integer.BYTES + senderBuffer.remaining() +  contentBuffer.remaining() + recipientBuffer.remaining());
-        result.put(OpCode.PRIVATE_SENDER) // operation
+        result.put(opCode) // operation
                 .putInt(senderBuffer.remaining()).put(senderBuffer) // sender
                 .putInt(recipientBuffer.remaining()).put(recipientBuffer) // recipient
                 .putInt(contentBuffer.remaining()).put(contentBuffer); // content

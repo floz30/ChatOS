@@ -1,5 +1,6 @@
 package fr.uge.chatos.packet;
 
+import fr.uge.chatos.utils.OpCode;
 import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
@@ -11,7 +12,7 @@ public class PrivateMessage implements Packet {
 
     @Override
     public ByteBuffer asByteBuffer() {
-        return Packets.ofMessageReader(sender, content, (byte) 5).flip();
+        return Packets.ofPrivateMessage(sender, recipient, content, OpCode.PRIVATE_RECEIVER).flip();
     }
 
     @Override

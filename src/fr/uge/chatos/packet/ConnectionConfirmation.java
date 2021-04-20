@@ -4,13 +4,16 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
-public class PrivateConnectionRequest implements Packet {
-    public String sender;
-    public String recipient;
+public class ConnectionConfirmation implements Connection {
+    public byte confirm;
+
+    public ConnectionConfirmation(byte confirm) {
+        this.confirm = confirm;
+    }
 
     @Override
     public ByteBuffer asByteBuffer() {
-        return Packets.ofPrivateConnection(sender, (byte) 7).flip();
+        return null;
     }
 
     @Override

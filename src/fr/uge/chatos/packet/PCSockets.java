@@ -4,7 +4,7 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
-public class PrivateConnectionSockets implements Packet {
+public class PCSockets implements Packet {
     public String sender;
     public String recipient;
     public byte reply;
@@ -16,9 +16,10 @@ public class PrivateConnectionSockets implements Packet {
     public ByteBuffer asByteBuffer() {
         if (needFirstPacket) {
             needFirstPacket = false;
-            return Packets.ofPrivateConnectionSockets(id, sender, port).flip();
+            return Packets.ofPrivateConnectionSockets(id, recipient, port).flip();
         }
-        return Packets.ofPrivateConnectionSockets(id, recipient, port).flip();
+        needFirstPacket = true;
+        return Packets.ofPrivateConnectionSockets(id, sender, port).flip();
     }
 
     @Override

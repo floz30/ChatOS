@@ -6,9 +6,9 @@ public interface PacketVisitor {
     /**
      * OpCode : 0 et 1.
      *
-     * @param connectionRequest
+     * @param connection
      */
-    void visit(ConnectionRequest connectionRequest);
+    void visit(Connection connection);
 
     /**
      * OpCode : 2 et 3.
@@ -27,23 +27,23 @@ public interface PacketVisitor {
     /**
      * OpCode : 6, 7 et 8.
      *
-     * @param privateConnectionRequest
+     * @param PCRequest
      */
-    void visit(PrivateConnectionRequest privateConnectionRequest);
+    void visit(PCRequest PCRequest);
 
     /**
      * OpCode : 9 et 10.
      *
-     * @param privateConnectionSockets
+     * @param PCSockets
      */
-    void visit(PrivateConnectionSockets privateConnectionSockets);
+    void visit(PCSockets PCSockets);
 
     /**
      * OpCode : 11.
      *
-     * @param privateConnectionConfirmation
+     * @param authentication
      */
-    void visit(PrivateConnectionConfirmation privateConnectionConfirmation);
+    void visit(Authentication authentication);
 
-    void visit(PrivateConnectionData privateConnectionData);
+    void visit(PCData PCData);
 }

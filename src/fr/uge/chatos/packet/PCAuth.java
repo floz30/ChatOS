@@ -4,12 +4,13 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
-public class ConnectionRequest implements Connection {
-    public String sender;
+public class PCAuth implements Authentication {
+    public String login;
+    public long id;
 
     @Override
     public ByteBuffer asByteBuffer() {
-        return Packets.ofAcceptConnection().flip();
+        return Packets.ofAuthenticationConfirmation(id, (byte) 1).flip();
     }
 
     @Override

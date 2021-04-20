@@ -8,12 +8,11 @@ import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import fr.uge.chatos.packet.Packet;
-import fr.uge.chatos.packet.PrivateConnectionData;
+import fr.uge.chatos.packet.PCData;
 import fr.uge.chatos.reader.*;
 import fr.uge.chatos.visitor.ServerPacketVisitor;
 
@@ -51,7 +50,7 @@ public class Server {
          */
         void processIn() {
             if (authenticated) {
-                treatPacket(new PrivateConnectionData(bufferIn, login));
+                treatPacket(new PCData(bufferIn, login));
             } else {
                 for (;;) {
                     var status = serverPacketReader.process(bufferIn);
@@ -68,8 +67,9 @@ public class Server {
             }
         }
 
-        void successfulAuthentication() {
+        void successfulAuthentication(String pseudo) {
             authenticated = true;
+            login = pseudo;
         }
 
         /**
@@ -325,8 +325,10 @@ public class Server {
 
     public void successfulAuthentication(PC pc) {
         Objects.requireNonNull(pc);
-        for (var context : pc.privateSockets.values()) {
-            context.successfulAuthentication();
+
+        for (var entry : pc.privateSockets.entrySet()) {
+            entry.getValue().successfulAuthentication(entry.getKey());
+            //context.successfulAuthentication(pseudo);
         }
     }
 
@@ -488,16 +490,16 @@ public class Server {
         context.queueMessage(packet.asByteBuffer());
     }
 
-    public void privateConnectionBroadcast(Packet packet, String recipientLogin, long id) {
-        var list = privateConnections.get(recipientLogin);
-        for (var pc : list) {
-            if (pc.getId() == id) {
-                var key = pc.getKey(recipientLogin); // récupération de la clef du destinataire
+    public void privateConnectionBroadcast(Packet packet, PC pc, String senderLogin) {
+        for (var pseudo : pc.privateSockets.keySet()) {
+            if (!pseudo.equals(senderLogin)) {
+                var key = pc.getKey(pseudo); // récupération de la clef du destinataire
                 var context = (Context) key.attachment(); // ne peut pas être null
                 context.queueMessage(packet.asByteBuffer());
                 return;
             }
         }
+
     }
 
 

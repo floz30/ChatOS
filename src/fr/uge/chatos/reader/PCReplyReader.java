@@ -1,15 +1,18 @@
 package fr.uge.chatos.reader;
 
-import fr.uge.chatos.packet.PrivateConnectionSockets;
+import fr.uge.chatos.packet.PCSockets;
 
 import java.nio.ByteBuffer;
 
-public class PrivateConnectionReplyReader implements Reader<PrivateConnectionSockets> {
+/**
+ * Pour serveur
+ */
+public class PCReplyReader implements Reader<PCSockets> {
     private enum State {DONE, WAITING_RECIPIENT, WAITING_REPLY, ERROR}
     private final StringReader stringReader = new StringReader();
     private final ByteReader byteReader = new ByteReader();
     private State currentState = State.WAITING_RECIPIENT;
-    private PrivateConnectionSockets sockets = new PrivateConnectionSockets();
+    private PCSockets sockets = new PCSockets();
 
     @Override
     public ProcessStatus process(ByteBuffer buffer) {
@@ -50,7 +53,7 @@ public class PrivateConnectionReplyReader implements Reader<PrivateConnectionSoc
     }
 
     @Override
-    public PrivateConnectionSockets get() {
+    public PCSockets get() {
         if (currentState != State.DONE) {
             throw new IllegalStateException();
         }
@@ -62,6 +65,6 @@ public class PrivateConnectionReplyReader implements Reader<PrivateConnectionSoc
         currentState = State.WAITING_RECIPIENT;
         stringReader.reset();
         byteReader.reset();
-        sockets = new PrivateConnectionSockets();
+        sockets = new PCSockets();
     }
 }
