@@ -7,51 +7,38 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import fr.uge.chatos.packet.Packet;
+import fr.uge.chatos.packet.PCData;
 import fr.uge.chatos.reader.*;
-import fr.uge.chatos.utils.*;
-
-import static fr.uge.chatos.utils.OpCode.*;
+import fr.uge.chatos.visitor.ServerPacketVisitor;
 
 /**
  *
  */
 public class Server {
 
-    private static class Packet {
-        private final Message message;
-        private final ByteBuffer buffer;
-
-        Packet(Message message) {
-            this.message = message;
-            buffer = null;
-        }
-
-        Packet(ByteBuffer buffer) {
-            message = null;
-            this.buffer = buffer;
-        }
-    }
-
-    private static abstract class Context {
+    public static class Context {
         protected final SocketChannel socket;
         protected final SelectionKey key;
         protected final Server server;
         protected final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
         protected final ByteBuffer bufferOut = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
-        protected final Queue<Packet> queue = new LinkedList<>();
-        protected final MessageReader messageReader = new MessageReader();
-        protected final StringReader stringReader = new StringReader();
-        protected final LongReader longReader = new LongReader();
+        protected final Queue<ByteBuffer> queue = new LinkedList<>();
+        protected final ServerPacketReader serverPacketReader = new ServerPacketReader();
+        protected final ServerPacketVisitor visitor;
+        private boolean authenticated = false;
+        private String login;
         private boolean closed;
 
-        private Context(SelectionKey key, Server server) {
+        private Context(Server server, SelectionKey key) {
             this.key = Objects.requireNonNull(key);
             this.socket = (SocketChannel) key.channel();
             this.server = Objects.requireNonNull(server);
+            visitor = new ServerPacketVisitor(server, this);
         }
 
         /**
@@ -61,7 +48,29 @@ public class Server {
          * Note: {@code bufferIn} is in <b>write-mode</b> before and after the call.
          * </p>
          */
-        abstract void processIn();
+        void processIn() {
+            if (authenticated) {
+                treatPacket(new PCData(bufferIn, login));
+            } else {
+                for (;;) {
+                    var status = serverPacketReader.process(bufferIn);
+                    switch (status) {
+                        case ERROR -> silentlyClose();
+                        case REFILL -> { return; }
+                        case DONE -> {
+                            var packet = serverPacketReader.get();
+                            serverPacketReader.reset();
+                            treatPacket(packet);
+                        }
+                    }
+                }
+            }
+        }
+
+        void successfulAuthentication(String pseudo) {
+            authenticated = true;
+            login = pseudo;
+        }
 
         /**
          * Process the content of {@code bufferOut}.
@@ -69,7 +78,17 @@ public class Server {
          * Note: {@code bufferOut} is in <b>write-mode</b> before and after the call.
          * </p>
          */
-        abstract void processOut();
+        void processOut() {
+            while (!queue.isEmpty()) {
+                var buffer = queue.peek();
+                if (bufferOut.remaining() >= buffer.remaining()) {
+                    bufferOut.put(buffer);
+                    queue.poll();
+                } else {
+                    break;
+                }
+            }
+        }
 
         /**
          * Performs the read action on {@code socket}.
@@ -105,36 +124,46 @@ public class Server {
         }
 
         /**
-         * Process data of {@code bufferIn} with the correct reader.
-         * <p>
-         * Note : {@code bufferIn} is in <b>write-mode</b> before and after the call.
-         * </p>
+         * Returns the current selectionKey of this context;
          *
-         * @param status The function to call to process data of {@code bufferIn}.
-         * @param runnable The action to do if data of {@code bufferIn} was successfully processed.
+         * @return The key.
          */
-        void processReader(Function<ByteBuffer, Reader.ProcessStatus> status, Runnable runnable) {
-            for (;;) {
-                switch (status.apply(bufferIn)) {
-                    case DONE -> runnable.run();
-                    case REFILL -> { return; }
-                    case ERROR -> {
-                        silentlyClose();
-                        return;
-                    }
-                }
-            }
+        public SelectionKey getKey() {
+            return key;
+        }
+
+        /**
+         * Returns the current {@code login} of this context.
+         *
+         * @return The current {@code login}.
+         */
+        public String getLogin() {
+            return login;
         }
 
         /**
          * Adds a message to the queue and process the content of {@code bufferOut}.
          *
-         * @param packet The buffer to send.
+         * @param buffer The buffer to send.
          */
-        void queueMessage(Packet packet) {
-            queue.add(packet);
+        void queueMessage(ByteBuffer buffer) {
+            queue.add(buffer);
             processOut();
             updateInterestOps();
+        }
+
+        /**
+         * Updates the {@code login}, only if the current {@code login} is null.
+         * <p>
+         * Note : We are not allowed to change our {@code login}.
+         * </p>
+         *
+         * @param login The new login link to this context.
+         */
+        public void setLogin(String login) {
+            if (this.login == null) {
+                this.login = Objects.requireNonNull(login);
+            }
         }
 
         /**
@@ -144,6 +173,10 @@ public class Server {
             try {
                 socket.close();
             } catch (IOException ignored) { }
+        }
+
+        void treatPacket(Packet packet) {
+            packet.accept(visitor);
         }
 
         /**
@@ -170,218 +203,61 @@ public class Server {
         }
     }
 
-    private class PublicContext extends Context {
-        private String login;
-
-        public PublicContext(Server server, SelectionKey key) {
-            super(key, server);
-        }
-
-        @Override
-         void processIn() {
-            bufferIn.flip();
-            var op = bufferIn.get();
-            bufferIn.compact();
-
-            switch (op) {
-                case CONNECTION_REQUEST: // Demande de connexion
-                    processReader(stringReader::process, () -> {
-                        var tmp = stringReader.get();
-                        if (server.acceptNewClient(tmp)) {
-                            login = tmp;
-                            sendConfirmation(Packets.ofAcceptConnection());
-                            logger.info(login + " is now connected");
-                        } else {
-                            sendConfirmation(Packets.ofErrorBuffer("The username \""+ login +"\" is already used."));
-                        }
-                        stringReader.reset();
-                    });
-                case GENERAL_SENDER: // Message général
-                    processReader(stringReader::process, () -> {
-                        server.publicBroadcast(new Packet(new Message(login, stringReader.get(), false)));
-                        stringReader.reset();
-                    });
-                    break;
-                case PRIVATE_SENDER: // Message privé
-                    processReader(messageReader::process, () -> {
-                        var message = messageReader.get();
-                        server.privateMessage(new Packet(new Message(login, message.getContent(), true)), message.getLogin());
-                        messageReader.reset();
-                    });
-                    break;
-                case PRIVATE_CONNECTION_REQUEST_SENDER: // demande de connexion privée
-                    processReader(stringReader::process, () -> {
-                        var pseudoB = stringReader.get();
-                        var id = ThreadLocalRandom.current().nextLong();
-                        pcs.put(id, new PC(login, pseudoB));
-
-                        var packet = new Packet(Packets.ofPrivateConnection(login, PRIVATE_CONNECTION_REQUEST_RECEIVER));
-                        server.privateMessage(packet, pseudoB);
-                        stringReader.reset();
-                    });
-                    break;
-                case PRIVATE_CONNECTION_REPLY: // confirmation connexion privée
-                    processReader(stringReader::process, () -> {
-                        var pseudoA = stringReader.get(); // pseudo A
-                        var confirm = bufferIn.flip().get();
-                        bufferIn.compact();
-
-                        var c = pcs.entrySet().stream()
-                                .filter(entry -> entry.getValue().privateSockets.containsKey(pseudoA)
-                                        && entry.getValue().privateSockets.containsKey(login))
-                                .findFirst();
-
-                        if (confirm == 1) { // co privée acceptée
-                            if (c.isPresent()) {
-                                var value = c.get();
-                                // envoi du port
-                                server.privateMessage(new Packet(Packets.ofPrivateConnectionSockets(value.getKey(), login, privatePort)), pseudoA);
-                                server.privateMessage(new Packet(Packets.ofPrivateConnectionSockets(value.getKey(), pseudoA, privatePort)), login);
-                            } else {
-                                // erreur : étape 6 non réalisée
-                                sendConfirmation(Packets.ofErrorBuffer("Le client \""+ pseudoA +"\" n'a pas fait de demande de connexion privée."));
-                            }
-                        } else { // co privée refusée
-                            c.ifPresent(longPCEntry -> pcs.remove(longPCEntry.getKey())); // suppression de la co privée
-                            server.privateMessage(new Packet(Packets.ofErrorBuffer("Le client \""+ login +"\" a refusé votre demande de connexion privée.")), pseudoA);
-                            //sendConfirmation(Packets.ofErrorBuffer("Le client \""+ login +"\" a refusé votre demande de connexion privée."));
-                        }
-                        stringReader.reset();
-                    });
-                    break;
-                default:
-                    logger.info("The byte op is unknown ("+ op +").");
-                    break;
-            }
-        }
-
-        private void sendConfirmation(ByteBuffer bb) {
-            if (bufferOut.remaining() >= bb.remaining()) {
-                bufferOut.put(bb.flip());
-            }
-            updateInterestOps();
-        }
-
-        @Override
-         void processOut() {
-            if (!queue.isEmpty()) {
-                var packet = queue.peek();
-
-                ByteBuffer buffer;
-                if (packet.message != null) { // si c'est un Message
-                    if (packet.message.isMp()) {
-                        buffer = Packets.ofMessageReader(packet.message.getLogin(), packet.message.getContent(), PRIVATE_RECEIVER);
-                    } else {
-                        buffer = Packets.ofMessageReader(packet.message.getLogin(), packet.message.getContent(), GENERAL_RECEIVER);
-                    }
-                } else { // sinon pour une connexion privée
-                    buffer = packet.buffer;
-                }
-
-                if (bufferOut.remaining() >= buffer.remaining()) {
-                    bufferOut.put(buffer.flip());
-                    queue.poll();
-                }
-            }
-        }
-    }
-
-    private class PrivateContext extends Context {
-        private boolean authenticated;
-        private long id;
-
-        public PrivateContext(Server server, SelectionKey key) {
-            super(key, server);
-        }
-
-        @Override
-        void processIn() {
-            if (authenticated) {
-                server.privatePacket(bufferIn, id, socket);
-            } else {
-                bufferIn.flip();
-                var op = bufferIn.get();
-                bufferIn.compact();
-
-                if (op == PRIVATE_CONNECTION_AUTHENTICATION) {
-                    processReader(longReader::process, () -> {
-                        var id = longReader.get();
-                        var pc = pcs.get(id);
-
-                        if (!pc.addNewConnection()) {
-                            // error : 2 clients max
-                            silentlyClose();
-                            return;
-                        }
-
-                        processReader(stringReader::process, () -> {
-                            var pseudo = stringReader.get();
-                            for (var entry : pc.privateSockets.entrySet()) {
-                                if (entry.getKey().equals(pseudo)) {
-                                    entry.setValue(this);
-                                    break;
-                                }
-                            }
-                            stringReader.reset();
-                        });
-
-                        authenticated = true;
-                        this.id = id;
-                        longReader.reset();
-                        if (pc.nbConnection == 2) {
-                            server.privateBroadcast(Packets.ofAuthenticationConfirmation(id, (byte) 1), id);
-                        }
-                    });
-                }
-            }
-
-        }
-
-        @Override
-        void processOut() {
-            if (!queue.isEmpty()) {
-                var packet = queue.peek();
-                if (packet.buffer != null) {
-                    var buffer = packet.buffer;
-                    if (bufferOut.remaining() >= buffer.remaining()) {
-                        bufferOut.put(buffer.flip());
-                        queue.poll();
-                    }
-                } else {
-                    throw new IllegalStateException();
-                }
-            }
-        }
-    }
-
-    private static class PC {
+    public static class PC {
         private int nbConnection = 0;
-        private final HashMap<String, PrivateContext> privateSockets = new HashMap<>();
+        private final long id;
+        private final HashMap<String, Context> privateSockets = new HashMap<>();
 
-        PC(String pseudoA, String pseudoB) {
+        PC(String pseudoA, String pseudoB, long id) {
             privateSockets.put(pseudoA, null);
             privateSockets.put(pseudoB, null);
+            this.id = id;
         }
 
-        boolean addNewConnection() {
+        SelectionKey getKey(String pseudo) {
+            Objects.requireNonNull(pseudo);
+            var context = privateSockets.get(pseudo);
+            return context.getKey();
+        }
+
+        public int getNbConnection() {
+            return nbConnection;
+        }
+
+        public Set<String> getPseudos() {
+            return privateSockets.keySet();
+        }
+
+        public long getId() {
+            return id;
+        }
+
+        public boolean addNewConnection() {
             if (nbConnection < 2) {
                 nbConnection++;
                 return true;
             }
             return false;
         }
+
+        public void updateOneContext(String pseudo, Context context) {
+            Objects.requireNonNull(pseudo);
+            Objects.requireNonNull(context);
+            privateSockets.put(pseudo, context);
+        }
     }
 
-    enum State {REQUEST, START_AUTHENTICATION, AUTHENTICATED, CLOSED}
     static final int MAX_BUFFER_SIZE = 1024;
     private static final Logger logger = Logger.getLogger(Server.class.getName());
     private final ServerSocketChannel socketPublic;
     private final ServerSocketChannel socketPrivate;
+    private SelectionKey privateKey;
+    private SelectionKey publicKey;
     private final Selector selector;
     private final HashSet<String> logins = new HashSet<>(); // à changer si thread
-    private final HashMap<Long, PC> pcs = new HashMap<>();
-    //private final HashMap<Long, PrivateContext> priConnections = new HashMap<>();
     private final int privatePort;
+    private final HashMap<String, SelectionKey> publicConnections = new HashMap<>();
+    private final HashMap<String, List<PC>> privateConnections = new HashMap<>();
 
     public Server(int port, int privatePort) throws IOException {
         if (port <= 0 || privatePort < 0) {
@@ -393,6 +269,109 @@ public class Server {
         socketPublic.bind(new InetSocketAddress(port));
         socketPrivate = ServerSocketChannel.open();
         socketPrivate.bind(new InetSocketAddress(privatePort));
+    }
+
+    public long getNewId() {
+        // TODO : à optimiser
+        var ids = new ArrayList<Long>();
+        var val = privateConnections.values();
+        for (var list : val) {
+            for (var pc : list) {
+                ids.add(pc.id);
+            }
+        }
+        long id;
+        do {
+            id = ThreadLocalRandom.current().nextLong();
+        }
+        while (ids.contains(id));
+        return id;
+    }
+
+    public void registerNewPublicConnection(String login, SelectionKey key) {
+        publicConnections.put(login, key);
+    }
+
+    public Optional<PC> getPrivateConnection(String pseudo, long id) {
+        var a = privateConnections.get(pseudo);
+        for (var pc : a) {
+            if (pc.id == id) {
+                return Optional.of(pc);
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<PC> getPrivateConnection(String pseudoA, String pseudoB) {
+        // on vérifie que d'un côté, ça suffit sauf gros bug
+        var a = privateConnections.get(pseudoA);
+        for (var pc : a) {
+            if (pc.privateSockets.containsKey(pseudoB)) {
+                return Optional.of(pc);
+            }
+        }
+        return Optional.empty();
+    }
+
+    public Optional<PC> getPrivateConnection(String pseudo, SelectionKey key) {
+        var a = privateConnections.get(pseudo);
+        for (var pc : a) {
+            if (pc.getKey(pseudo).equals(key)) {
+                return Optional.of(pc);
+            }
+        }
+        return Optional.empty();
+    }
+
+    public void successfulAuthentication(PC pc) {
+        Objects.requireNonNull(pc);
+
+        for (var entry : pc.privateSockets.entrySet()) {
+            entry.getValue().successfulAuthentication(entry.getKey());
+            //context.successfulAuthentication(pseudo);
+        }
+    }
+
+    public int getPrivatePort() {
+        return privatePort;
+    }
+
+    public boolean checkIfPrivateConnectionExists(String pseudoA, String pseudoB) {
+        var a = privateConnections.get(pseudoA);
+        if (a != null) {
+            for (var pc : a) {
+                if (pc.privateSockets.containsKey(pseudoB)) {
+                    return true;
+                }
+            }
+        } else {
+            var b = privateConnections.get(pseudoB);
+            if (b != null) {
+                for (var pc : b) {
+                    if (pc.privateSockets.containsKey(pseudoA)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private BiFunction<String, List<PC>, List<PC>> computePrivateConnections(PC pc) {
+        return (key, value) -> {
+            if (value != null) {
+                value.add(pc);
+            } else {
+                value = new ArrayList<>(Arrays.asList(pc));
+            }
+            return value;
+        };
+    }
+
+    public void registerNewPrivateConnection(long id, String a, String b) {
+        var pc = new PC(a, b, id);
+        privateConnections.compute(a, computePrivateConnections(pc));
+        privateConnections.compute(b, computePrivateConnections(pc));
     }
 
     private boolean acceptNewClient(String login) {
@@ -410,18 +389,22 @@ public class Server {
      */
     private void doAccept(SelectionKey key) throws IOException {
         SocketChannel sc;
-        if ((sc = socketPublic.accept()) != null) {
-            sc.configureBlocking(false);
-            var clientKey = sc.register(selector, SelectionKey.OP_READ);
-            clientKey.attach(new PublicContext(this, clientKey));
-
-        } else if ((sc = socketPrivate.accept()) != null) {
-            sc.configureBlocking(false);
-            var clientKey = sc.register(selector, SelectionKey.OP_READ);
-            clientKey.attach(new PrivateContext(this, clientKey));
-        } else {
-            logger.info("The selector was wrong.");
+        if (key.equals(publicKey)) {
+            if ((sc = socketPublic.accept()) != null) {
+                sc.configureBlocking(false);
+                var clientKey = sc.register(selector, SelectionKey.OP_READ);
+                clientKey.attach(new Context(this, clientKey));
+                return;
+            }
+        } else if (key.equals(privateKey)) {
+            if ((sc = socketPrivate.accept()) != null) {
+                sc.configureBlocking(false);
+                var clientKey = sc.register(selector, SelectionKey.OP_READ);
+                clientKey.attach(new Context(this, clientKey));
+                return;
+            }
         }
+        logger.info("The selector was wrong.");
     }
 
     /**
@@ -431,10 +414,10 @@ public class Server {
     public void launch() throws IOException {
         logger.info("Server started...");
         socketPublic.configureBlocking(false);
-        socketPublic.register(selector, SelectionKey.OP_ACCEPT);
+        publicKey = socketPublic.register(selector, SelectionKey.OP_ACCEPT);
 
         socketPrivate.configureBlocking(false);
-        socketPrivate.register(selector, SelectionKey.OP_ACCEPT);
+        privateKey = socketPrivate.register(selector, SelectionKey.OP_ACCEPT);
 
         while (!Thread.interrupted()) {
             printKeys();
@@ -488,74 +471,36 @@ public class Server {
      *
      * @param packet Message to send.
      */
-	void publicBroadcast(Packet packet) {
-		for (var key: selector.keys()) {
-		    try {
-                var context = (PublicContext) key.attachment();
-                if (context == null) {
-                    continue;
-                }
-                context.queueMessage(packet);
-            } catch (ClassCastException ignored) { }
-		}
+	public void publicBroadcast(Packet packet) {
+	    for (var a : publicConnections.values()) {
+	        var context = (Context) a.attachment();
+            context.queueMessage(packet.asByteBuffer()); // ne peut pas être null
+        }
 	}
 
     /**
      * Send a message to the specified client.
      *
      * @param packet Message to send.
-     * @param loginDest Message recipient.
+     *
      */
-    void privateMessage(Packet packet, String loginDest) {
-        for (var key : selector.keys()) {
-            try {
-                var context = (PublicContext) key.attachment();
-                if (context == null) {
-                    continue;
-                }
-                // TODO : avertir l'expéditeur si le destinataire est déconnecté
-                if (loginDest.equals(context.login)) {
-                    context.queueMessage(packet);
-                    return;
-                }
-            } catch (ClassCastException ignored) { }
-        }
+    public void privateBroadcast(Packet packet, String recipientLogin) {
+        var key = publicConnections.get(recipientLogin);
+        var context = (Context) key.attachment();
+        context.queueMessage(packet.asByteBuffer());
     }
 
-	void privateBroadcast(ByteBuffer buffer, long id) {
-	    for (var key : selector.keys()) {
-	        try {
-	            var context = (PrivateContext) key.attachment();
-	            if (context == null) {
-	                continue;
-                }
-
-	            if (context.id == id) {
-                    context.queueMessage(new Packet(buffer));
-                }
-            } catch (ClassCastException ignored) { }
+    public void privateConnectionBroadcast(Packet packet, PC pc, String senderLogin) {
+        for (var pseudo : pc.privateSockets.keySet()) {
+            if (!pseudo.equals(senderLogin)) {
+                var key = pc.getKey(pseudo); // récupération de la clef du destinataire
+                var context = (Context) key.attachment(); // ne peut pas être null
+                context.queueMessage(packet.asByteBuffer());
+                return;
+            }
         }
+
     }
-
-    void privatePacket(ByteBuffer buffer, long id, SocketChannel sc) {
-        for (var key : selector.keys()) {
-            try {
-                var context = (PrivateContext) key.attachment();
-                if (context == null) {
-                    continue;
-                }
-
-                if (context.id == id) {
-                    if (key.channel() == sc) {
-                        continue;
-                    }
-                    context.queueMessage(new Packet(buffer));
-                }
-            } catch (ClassCastException ignored) { }
-        }
-    }
-
-
 
 
     ///////////////
