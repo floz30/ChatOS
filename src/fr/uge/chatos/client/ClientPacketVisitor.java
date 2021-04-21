@@ -1,7 +1,7 @@
-package fr.uge.chatos.visitor;
+package fr.uge.chatos.client;
 
-import fr.uge.chatos.client.Client;
 import fr.uge.chatos.packet.*;
+import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.util.Objects;
 import java.util.logging.Logger;
@@ -20,7 +20,6 @@ public class ClientPacketVisitor implements PacketVisitor {
     public void visit(Connection connection) {
         var connectionConfirmation = (ConnectionConfirmation) connection;
         if (connectionConfirmation.confirm == (byte) 1) {
-            //context.successfulAuthentication();
             System.out.println("Connection success.");
         } else {
             System.out.println("Connection failed.");

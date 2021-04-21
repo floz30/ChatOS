@@ -15,7 +15,9 @@
     </target>
 
     <target name="build" description="Compile source java files and create jar files.">
-        <javac srcdir="${src}" destdir="${build}" />
+        <javac srcdir="${src}" destdir="${build}">
+            <compilerarg line="--enable-preview --release 15" />
+        </javac>
 
         <jar destfile="${jar}/client.jar" basedir="${build}">
             <manifest>
@@ -24,13 +26,15 @@
         </jar>
         <jar destfile="${jar}/server.jar" basedir="${build}">
             <manifest>
-                <attribute name="Main-Class" value="fr.uge.chatos.Main" />
+                <attribute name="Main-Class" value="fr.uge.chatos.server.Server" />
             </manifest>
         </jar>
     </target>
 
     <target name="javadoc" description="Generate JavaDoc.">
-        <javadoc sourcepath="${src}" destdir="${doc}" />
+        <javadoc sourcepath="${src}" destdir="${doc}" package="true">
+            <arg line="--enable-preview --release 15"/>
+        </javadoc>
     </target>
 
     <target name="clean" description="Clean all output directories.">

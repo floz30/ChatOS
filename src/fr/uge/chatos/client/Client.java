@@ -4,7 +4,6 @@ import fr.uge.chatos.packet.Packet;
 import fr.uge.chatos.packet.PCData;
 import fr.uge.chatos.reader.*;
 import fr.uge.chatos.packet.Packets;
-import fr.uge.chatos.visitor.ClientPacketVisitor;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -18,15 +17,19 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static fr.uge.chatos.utils.OpCode.*;
 
-
+/**
+ *
+ */
 public class Client {
 
+    /**
+     *
+     */
     public static abstract class Context {
         protected final SocketChannel socket;
         protected final SelectionKey key;
@@ -131,28 +134,6 @@ public class Client {
         }
 
         /**
-         * Process data of {@code bufferIn} with the correct reader.
-         * <p>
-         * Note : {@code bufferIn} is in <b>write-mode</b> before and after the call.
-         * </p>
-         *
-         * @param status The function to call to process data of {@code bufferIn}.
-         * @param runnable The action to do if data of {@code bufferIn} was successfully processed.
-         */
-        void processReader(Function<ByteBuffer, Reader.ProcessStatus> status, Runnable runnable) {
-            for (;;) {
-                switch (status.apply(bufferIn)) {
-                    case DONE -> runnable.run();
-                    case REFILL -> { return; }
-                    case ERROR -> {
-                        silentlyClose();
-                        return;
-                    }
-                }
-            }
-        }
-
-        /**
          * Adds a message to the queue and process the content of {@code bufferOut}.
          *
          * @param buffer The buffer to send.
@@ -172,8 +153,10 @@ public class Client {
             } catch (IOException ignored) { }
         }
 
-
-
+        /**
+         *
+         * @param packet the {@code packet} to treat
+         */
         void treatPacket(Packet packet) {
             packet.accept(visitor);
         }
@@ -217,7 +200,7 @@ public class Client {
 
     public class ContextPrivate extends Context {
         private String initialRequest;
-        private long id;
+        private final long id;
         private boolean authenticated = false;
 
         ContextPrivate(SelectionKey key, Client client, long id) {
@@ -245,23 +228,23 @@ public class Client {
         }
     }
 
-    public static class PC {
+    /**
+     * This class represents a private connection.
+     * <p>
+     * A private connection have a unique ID.
+     */
+    static class PrivateConnection {
         private final long id;
         private final ContextPrivate context;
 
-        public PC(long id, ContextPrivate context) {
+        PrivateConnection(long id, ContextPrivate context) {
             this.id = id;
             this.context = Objects.requireNonNull(context);
         }
 
-        public ContextPrivate getContext() {
+        ContextPrivate getContext() {
             return context;
         }
-
-        public long getId() {
-            return id;
-        }
-
     }
 
     private static final Logger logger = Logger.getLogger(Client.class.getName());
@@ -275,7 +258,7 @@ public class Client {
     private final Object lock = new Object();
     private final Path repository;
     private ContextPublic contextPublic;
-    private final HashMap<String, PC> privateConnections = new HashMap<>();
+    private final HashMap<String, PrivateConnection> privateConnections = new HashMap<>();
 
     public Client(String login, InetSocketAddress serverAddress, String repository) throws IOException {
         this.serverAddress = Objects.requireNonNull(serverAddress);
@@ -287,12 +270,17 @@ public class Client {
         this.repository = Paths.get(repository);
     }
 
+    /**
+     * Returns the current login of this client.
+     *
+     * @return the current login
+     */
     public String getLogin() {
         return login;
     }
 
     /**
-     * Thread that manages the console.
+     * Thread that manages the client console.
      */
     private void consoleRun() {
         try (var scan = new Scanner(System.in)) {
@@ -308,49 +296,14 @@ public class Client {
     }
 
     /**
+     * Treat the command written by the user and wake up the selector.
      *
-     * @param command The line written by the user.
+     * @param command the line written by the user
      */
     private void sendCommand(String command) throws InterruptedException {
         synchronized (lock) {
             commandQueue.put(Objects.requireNonNull(command));
             selector.wakeup();
-        }
-    }
-
-    private static class Command {
-        private final String recipient;
-        private final String content;
-        private final boolean isMessage;
-
-        Command(String recipient, String content, boolean isMessage) {
-            this.recipient = recipient;
-            this.content = content;
-            this.isMessage = isMessage;
-        }
-
-        /**
-         * Extracts the command written by the client.
-         *
-         * @param message The line written by the client.
-         * @return a Command object.
-         */
-        static Command extractCommand(String message) {
-            Objects.requireNonNull(message);
-            String recipient, content;
-            boolean isMessage = true;
-            if (message.startsWith("@") || message.startsWith("/")) { // connexion privée
-                var elements = message.split(" ", 2);
-                recipient = elements[0].substring(1);
-                content = elements[1];
-                if (elements[0].charAt(0) == '/') {
-                    isMessage = false;
-                }
-            } else { // message général
-                recipient = null;
-                content = message;
-            }
-            return new Command(recipient, content, isMessage);
         }
     }
 
@@ -366,29 +319,26 @@ public class Client {
                 }
                 ByteBuffer buffer;
                 var cmd = Command.extractCommand(tmp);
-                if (cmd.isMessage) {
-                    if (cmd.recipient != null) {
-                        buffer = Packets.ofPrivateMessage(login, cmd.recipient, cmd.content, PRIVATE_SENDER); // message privé
+                if (cmd.isMessage()) {
+                    if (cmd.recipient() != null) {
+                        buffer = Packets.ofPrivateMessage(login, cmd.recipient(), cmd.content(), PRIVATE_SENDER); // message privé
                     } else {
-                        buffer = Packets.ofPublicMessage(login, cmd.content); // message général
+                        buffer = Packets.ofPublicMessage(login, cmd.content()); // message général
                     }
                 } else {
                     // Connexion privée
-                    //var context = priConnections.get(cmd.recipient);
-                    var pc = privateConnections.get(cmd.recipient);
+                    var pc = privateConnections.get(cmd.recipient());
                     if (pc == null) { // si pas de connexion existante
-                        if (cmd.content.equals("oui") || cmd.content.equals("non")) { // si confirmation de la connexion
-                            var confirm = cmd.content.equals("oui") ? (byte) 1 : (byte) 0;
-                            buffer = Packets.ofPrivateConnectionReply(cmd.recipient, confirm);
-                            //connections.put(cmd.recipient, new ContextPrivate(ke));
+                        if (cmd.content().equals("oui") || cmd.content().equals("non")) { // si confirmation de la connexion
+                            var confirm = cmd.content().equals("oui") ? (byte) 1 : (byte) 0;
+                            buffer = Packets.ofPrivateConnectionReply(cmd.recipient(), confirm);
                         } else { // sinon demande de connexion
-                            buffer = Packets.ofPrivateConnection(cmd.recipient, PRIVATE_CONNECTION_REQUEST_SENDER);
-                            //connections.put(cmd.recipient, new Connection(cmd.recipient, cmd.content));
+                            buffer = Packets.ofPrivateConnection(cmd.recipient(), PRIVATE_CONNECTION_REQUEST_SENDER);
                         }
                     } else { // sur le port privé
                         if (pc.getContext().authenticated) {
                             // si déjà authentifié appel du client http
-                            buffer = ByteBuffer.allocate(4);
+                            buffer = ByteBuffer.allocate(4); // TODO : à changer avec HTTP
                             buffer.putInt(3);
                             System.out.println("authentifié et envoi http");
                         } else {
@@ -408,16 +358,16 @@ public class Client {
         }
     }
 
-    public Optional<Map.Entry<String, PC>> getPrivateConnection(long id) {
+    public Optional<Map.Entry<String, PrivateConnection>> getPrivateConnection(long id) {
         return privateConnections.entrySet().stream().filter(entry -> entry.getValue().id == id).findFirst();
     }
 
     /**
      * Initializes a new private connection with a new socketChannel.
      *
-     * @param port The server port.
-     * @param recipient The username of the recipient.
-     * @param id The ID of private connection.
+     * @param port the server port
+     * @param recipient the username of the recipient
+     * @param id the ID of private connection
      */
     public void startPrivateConnection(int port, String recipient, long id) {
         try {
@@ -427,17 +377,16 @@ public class Client {
             var context = new ContextPrivate(key, this, id);
             key.attach(context);
             socket.connect(new InetSocketAddress(port));
-            //priConnections.put(recipient, context);
-            privateConnections.put(recipient, new PC(id, context));
-            //context.queueMessage(Packets.ofAuthenticationConfirmation(id, (byte) 1).flip());
+            privateConnections.put(recipient, new PrivateConnection(id, context));
         } catch (IOException e) {
-            logger.log(Level.WARNING, "erreur", e);
+            logger.log(Level.WARNING, "Error", e);
         }
     }
 
     /**
+     * Start the main client loop.
      *
-     * @throws IOException
+     * @throws IOException if some other I/O error occurs
      */
     private void launch() throws IOException {
         socketPublic.configureBlocking(false);
@@ -494,7 +443,7 @@ public class Client {
 
     public static void main(String[] args) throws NumberFormatException, IOException {
         if (args.length != 4) {
-            System.err.println("Usage : Client login hostname port repository");
+            System.err.println("Usage : client <login> <hostname> <port> <repository>");
             return;
         }
 

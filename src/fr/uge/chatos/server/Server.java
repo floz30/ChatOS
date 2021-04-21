@@ -17,19 +17,28 @@ import fr.uge.chatos.reader.*;
 import fr.uge.chatos.visitor.ServerPacketVisitor;
 
 /**
- *
+ * This class implements an TCP server.
+ * <p>
+ * The server has two different ports :
+ * <ul>
+ *     <li>one for public connections</li>
+ *     <li>one for private connections</li>
+ * </ul>
  */
 public class Server {
 
+    /**
+     * This class represents a context for one private or public connection.
+     */
     public static class Context {
-        protected final SocketChannel socket;
-        protected final SelectionKey key;
-        protected final Server server;
-        protected final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
-        protected final ByteBuffer bufferOut = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
-        protected final Queue<ByteBuffer> queue = new LinkedList<>();
-        protected final ServerPacketReader serverPacketReader = new ServerPacketReader();
-        protected final ServerPacketVisitor visitor;
+        private final SocketChannel socket;
+        private final SelectionKey key;
+        private final Server server;
+        private final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
+        private final ByteBuffer bufferOut = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
+        private final Queue<ByteBuffer> queue = new LinkedList<>();
+        private final ServerPacketReader serverPacketReader = new ServerPacketReader();
+        private final ServerPacketVisitor visitor;
         private boolean authenticated = false;
         private String login;
         private boolean closed;
@@ -67,9 +76,17 @@ public class Server {
             }
         }
 
-        void successfulAuthentication(String pseudo) {
+        /**
+         * Updates this context by save his login and indicating that he is authenticated.
+         * <p>
+         *     Note : to be used only for private connections.
+         * </p>
+         *
+         * @param login the login of the client
+         */
+        void successfulAuthentication(String login) {
             authenticated = true;
-            login = pseudo;
+            this.login = login;
         }
 
         /**
@@ -175,6 +192,10 @@ public class Server {
             } catch (IOException ignored) { }
         }
 
+        /**
+         *
+         * @param packet
+         */
         void treatPacket(Packet packet) {
             packet.accept(visitor);
         }
@@ -203,35 +224,77 @@ public class Server {
         }
     }
 
-    public static class PC {
-        private int nbConnection = 0;
-        private final long id;
+    /**
+     * This class represents a private connection between two clients.
+     * <p>
+     * A private connection have a unique ID.
+     */
+    public static class PrivateConnection {
         private final HashMap<String, Context> privateSockets = new HashMap<>();
+        private final long id;
+        private int nbConnection = 0;
 
-        PC(String pseudoA, String pseudoB, long id) {
-            privateSockets.put(pseudoA, null);
-            privateSockets.put(pseudoB, null);
+        /**
+         * Creates a new {@code PrivateConnection} with the given initial values.
+         *
+         * @param firstLogin the login of the first client
+         * @param secondLogin the login of the second client
+         * @param id the ID of this new private connection
+         */
+        PrivateConnection(String firstLogin, String secondLogin, long id) {
+            privateSockets.put(Objects.requireNonNull(firstLogin), null);
+            privateSockets.put(Objects.requireNonNull(secondLogin), null);
             this.id = id;
         }
 
-        SelectionKey getKey(String pseudo) {
-            Objects.requireNonNull(pseudo);
-            var context = privateSockets.get(pseudo);
+        /**
+         * Returns the {@link java.nio.channels.SelectionKey} of the {@code context} associate
+         * to the specified {@code login}.
+         *
+         * @param login the {@code login} of the client
+         * @return the current key
+         */
+        SelectionKey getKey(String login) {
+            Objects.requireNonNull(login);
+            var context = privateSockets.get(login);
             return context.getKey();
         }
 
+        /**
+         * Returns the number of clients who have connected on this private connection.
+         *
+         * @return the number of clients
+         */
         public int getNbConnection() {
             return nbConnection;
         }
 
+        /**
+         * Returns all the usernames of connected clients on this private connection.
+         *
+         * @return all the usernames in a set
+         */
         public Set<String> getPseudos() {
             return privateSockets.keySet();
         }
 
+        /**
+         * Returns the ID associated to this private connection.
+         *
+         * @return the ID of this private connection
+         */
         public long getId() {
             return id;
         }
 
+        /**
+         * Checks if this private connection can still accept new clients
+         * and increments the connection counter if so.
+         * <p>
+         * Note : a private connection can only accept a maximum of two clients.
+         *
+         * @return {@code true} if this private connection can still accept new clients.
+         */
         public boolean addNewConnection() {
             if (nbConnection < 2) {
                 nbConnection++;
@@ -240,10 +303,29 @@ public class Server {
             return false;
         }
 
-        public void updateOneContext(String pseudo, Context context) {
-            Objects.requireNonNull(pseudo);
+        /**
+         * Updates the {@code context} associate with the specified {@code login}.
+         *
+         * @param login the {@code login} of the client
+         * @param context the new {@code context}
+         */
+        public void updateOneContext(String login, Context context) {
+            Objects.requireNonNull(login);
             Objects.requireNonNull(context);
-            privateSockets.put(pseudo, context);
+            privateSockets.put(login, context);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            PrivateConnection that = (PrivateConnection) o;
+            return id == that.id;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id);
         }
     }
 
@@ -257,7 +339,7 @@ public class Server {
     private final HashSet<String> logins = new HashSet<>(); // à changer si thread
     private final int privatePort;
     private final HashMap<String, SelectionKey> publicConnections = new HashMap<>();
-    private final HashMap<String, List<PC>> privateConnections = new HashMap<>();
+    private final HashMap<String, List<PrivateConnection>> privateConnections = new HashMap<>();
 
     public Server(int port, int privatePort) throws IOException {
         if (port <= 0 || privatePort < 0) {
@@ -292,7 +374,7 @@ public class Server {
         publicConnections.put(login, key);
     }
 
-    public Optional<PC> getPrivateConnection(String pseudo, long id) {
+    public Optional<PrivateConnection> getPrivateConnection(String pseudo, long id) {
         var a = privateConnections.get(pseudo);
         for (var pc : a) {
             if (pc.id == id) {
@@ -302,7 +384,7 @@ public class Server {
         return Optional.empty();
     }
 
-    public Optional<PC> getPrivateConnection(String pseudoA, String pseudoB) {
+    public Optional<PrivateConnection> getPrivateConnection(String pseudoA, String pseudoB) {
         // on vérifie que d'un côté, ça suffit sauf gros bug
         var a = privateConnections.get(pseudoA);
         for (var pc : a) {
@@ -313,7 +395,7 @@ public class Server {
         return Optional.empty();
     }
 
-    public Optional<PC> getPrivateConnection(String pseudo, SelectionKey key) {
+    public Optional<PrivateConnection> getPrivateConnection(String pseudo, SelectionKey key) {
         var a = privateConnections.get(pseudo);
         for (var pc : a) {
             if (pc.getKey(pseudo).equals(key)) {
@@ -323,32 +405,51 @@ public class Server {
         return Optional.empty();
     }
 
-    public void successfulAuthentication(PC pc) {
-        Objects.requireNonNull(pc);
-
-        for (var entry : pc.privateSockets.entrySet()) {
+    /**
+     * Updates a {@code PrivateConnection} by updating client logins.
+     *
+     * @param privateConnection the private connection to update
+     */
+    public void successfulAuthentication(PrivateConnection privateConnection) {
+        Objects.requireNonNull(privateConnection);
+        for (var entry : privateConnection.privateSockets.entrySet()) {
             entry.getValue().successfulAuthentication(entry.getKey());
-            //context.successfulAuthentication(pseudo);
         }
     }
 
+    /**
+     * Returns the private port of this server.
+     *
+     * @return the private port
+     */
     public int getPrivatePort() {
         return privatePort;
     }
 
-    public boolean checkIfPrivateConnectionExists(String pseudoA, String pseudoB) {
-        var a = privateConnections.get(pseudoA);
-        if (a != null) {
-            for (var pc : a) {
-                if (pc.privateSockets.containsKey(pseudoB)) {
+    /**
+     * Checks if a {@code PrivateConnection} exists between the two clients
+     * specified by their logins.
+     *
+     * @param firstLogin the {@code login} of the first client
+     * @param secondLogin the {@code login} of the second client
+     * @return {@code true} if a {@code PrivateConnection} exists
+     */
+    public boolean checkIfPrivateConnectionExists(String firstLogin, String secondLogin) {
+        Objects.requireNonNull(firstLogin);
+        Objects.requireNonNull(secondLogin);
+
+        var pcList = privateConnections.get(firstLogin);
+        if (pcList != null) {
+            for (var pc : pcList) {
+                if (pc.privateSockets.containsKey(secondLogin)) {
                     return true;
                 }
             }
         } else {
-            var b = privateConnections.get(pseudoB);
-            if (b != null) {
-                for (var pc : b) {
-                    if (pc.privateSockets.containsKey(pseudoA)) {
+            pcList = privateConnections.get(secondLogin);
+            if (pcList != null) {
+                for (var pc : pcList) {
+                    if (pc.privateSockets.containsKey(firstLogin)) {
                         return true;
                     }
                 }
@@ -357,21 +458,35 @@ public class Server {
         return false;
     }
 
-    private BiFunction<String, List<PC>, List<PC>> computePrivateConnections(PC pc) {
+    /**
+     * Returns a {@link java.util.function.BiFunction} that tries to merge {@code PrivateConnection} that have a common client.
+     *
+     * @param privateConnection the private connection to merge
+     * @return a {@code BiFunction}
+     */
+    private BiFunction<String, List<PrivateConnection>, List<PrivateConnection>> computePrivateConnections(PrivateConnection privateConnection) {
         return (key, value) -> {
             if (value != null) {
-                value.add(pc);
+                value.add(privateConnection);
             } else {
-                value = new ArrayList<>(Arrays.asList(pc));
+                value = new ArrayList<>(Arrays.asList(privateConnection));
             }
             return value;
         };
     }
 
-    public void registerNewPrivateConnection(long id, String a, String b) {
-        var pc = new PC(a, b, id);
-        privateConnections.compute(a, computePrivateConnections(pc));
-        privateConnections.compute(b, computePrivateConnections(pc));
+    /**
+     * Creates a new {@code PrivateConnection} with the given values and
+     * register it.
+     *
+     * @param id the ID of this new {@code PrivateConnection}.
+     * @param firstLogin the {@code login} of the first client
+     * @param secondLogin the {@code login} of the second client
+     */
+    public void registerNewPrivateConnection(long id, String firstLogin, String secondLogin) {
+        var pc = new PrivateConnection(firstLogin, secondLogin, id);
+        privateConnections.compute(firstLogin, computePrivateConnections(pc));
+        privateConnections.compute(secondLogin, computePrivateConnections(pc));
     }
 
     private boolean acceptNewClient(String login) {
@@ -384,7 +499,7 @@ public class Server {
 
     /**
      *
-     * @param key
+     * @param key the SelectionKey
      * @throws IOException If some other I/O error occurs.
      */
     private void doAccept(SelectionKey key) throws IOException {
@@ -408,6 +523,7 @@ public class Server {
     }
 
     /**
+     * Start the main server loop.
      *
      * @throws IOException If some other I/O error occurs.
      */
@@ -467,9 +583,9 @@ public class Server {
     }
 
     /**
-     * Send a message to all client connected.
+     * Broadcasts a {@link fr.uge.chatos.packet.Packet} to all connected clients.
      *
-     * @param packet Message to send.
+     * @param packet the packet to send
      */
 	public void publicBroadcast(Packet packet) {
 	    for (var a : publicConnections.values()) {
@@ -479,21 +595,33 @@ public class Server {
 	}
 
     /**
-     * Send a message to the specified client.
+     * Broadcasts a {@link fr.uge.chatos.packet.Packet} to a {@code client} specified
+     * by his {@code login}.
      *
-     * @param packet Message to send.
-     *
+     * @param packet the packet to send
+     * @param login the login of the recipient client
      */
-    public void privateBroadcast(Packet packet, String recipientLogin) {
-        var key = publicConnections.get(recipientLogin);
+    public void privateBroadcast(Packet packet, String login) {
+        var key = publicConnections.get(login);
         var context = (Context) key.attachment();
         context.queueMessage(packet.asByteBuffer());
     }
 
-    public void privateConnectionBroadcast(Packet packet, PC pc, String senderLogin) {
-        for (var pseudo : pc.privateSockets.keySet()) {
+    /**
+     * Broadcasts a {@link fr.uge.chatos.packet.Packet} to a {@code client}
+     * via the {@link fr.uge.chatos.server.Server.PrivateConnection}.
+     * <p>
+     *     Note : You must specify the sender's login.
+     * </p>
+     *
+     * @param packet the packet to send
+     * @param privateConnection the private connection between the two clients
+     * @param senderLogin the login of the sender
+     */
+    public void privateConnectionBroadcast(Packet packet, PrivateConnection privateConnection, String senderLogin) {
+        for (var pseudo : privateConnection.privateSockets.keySet()) {
             if (!pseudo.equals(senderLogin)) {
-                var key = pc.getKey(pseudo); // récupération de la clef du destinataire
+                var key = privateConnection.getKey(pseudo); // récupération de la clef du destinataire
                 var context = (Context) key.attachment(); // ne peut pas être null
                 context.queueMessage(packet.asByteBuffer());
                 return;
@@ -565,5 +693,28 @@ public class Server {
         if (key.isReadable()) list.add("READ");
         if (key.isWritable()) list.add("WRITE");
         return String.join(" and ",list);
+    }
+
+    public static void main(String[] args) throws IOException {
+        if (args.length != 2) {
+            System.err.println("Usage: server <public_port> <private_port>");
+            return;
+        }
+
+        int publicPort, privatePort;
+        try {
+            publicPort = Integer.parseInt(args[0]);
+            privatePort = Integer.parseInt(args[1]);
+        } catch (NumberFormatException e) {
+            System.err.println("Port number must be an Integer.");
+            return;
+        }
+
+        if (publicPort == privatePort) {
+            throw new IllegalArgumentException("Public and private ports cannot be the same");
+        }
+
+        // Start server
+        new Server(publicPort, privatePort).launch();
     }
 }
