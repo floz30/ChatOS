@@ -4,7 +4,7 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
-public class ConnectionConfirmation implements Connection {
+public class ConnectionConfirmation implements Packet {
     public byte confirm;
 
     public ConnectionConfirmation(byte confirm) {

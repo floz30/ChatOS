@@ -4,7 +4,7 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
-public class PCAuthConfirmation implements Authentication {
+public class PCAuthConfirmation implements Packet {
     public long id;
     public byte confirm;
 

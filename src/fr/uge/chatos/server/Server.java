@@ -3,7 +3,6 @@ package fr.uge.chatos.server;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -11,10 +10,10 @@ import java.util.function.BiFunction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import fr.uge.chatos.context.Context;
+import fr.uge.chatos.context.ServerContext;
 import fr.uge.chatos.packet.Packet;
-import fr.uge.chatos.packet.PCData;
-import fr.uge.chatos.reader.*;
-import fr.uge.chatos.visitor.ServerPacketVisitor;
+
 
 /**
  * This class implements an TCP server.
@@ -28,209 +27,12 @@ import fr.uge.chatos.visitor.ServerPacketVisitor;
 public class Server {
 
     /**
-     * This class represents a context for one private or public connection.
-     */
-    public static class Context {
-        private final SocketChannel socket;
-        private final SelectionKey key;
-        private final Server server;
-        private final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
-        private final ByteBuffer bufferOut = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);
-        private final Queue<ByteBuffer> queue = new LinkedList<>();
-        private final ServerPacketReader serverPacketReader = new ServerPacketReader();
-        private final ServerPacketVisitor visitor;
-        private boolean authenticated = false;
-        private String login;
-        private boolean closed;
-
-        private Context(Server server, SelectionKey key) {
-            this.key = Objects.requireNonNull(key);
-            this.socket = (SocketChannel) key.channel();
-            this.server = Objects.requireNonNull(server);
-            visitor = new ServerPacketVisitor(server, this);
-        }
-
-        /**
-         * Process the content of {@code bufferIn}.
-         * Get the first byte and check what action needs to be done.
-         * <p>
-         * Note: {@code bufferIn} is in <b>write-mode</b> before and after the call.
-         * </p>
-         */
-        void processIn() {
-            if (authenticated) {
-                treatPacket(new PCData(bufferIn, login));
-            } else {
-                for (;;) {
-                    var status = serverPacketReader.process(bufferIn);
-                    switch (status) {
-                        case ERROR -> silentlyClose();
-                        case REFILL -> { return; }
-                        case DONE -> {
-                            var packet = serverPacketReader.get();
-                            serverPacketReader.reset();
-                            treatPacket(packet);
-                        }
-                    }
-                }
-            }
-        }
-
-        /**
-         * Updates this context by save his login and indicating that he is authenticated.
-         * <p>
-         *     Note : to be used only for private connections.
-         * </p>
-         *
-         * @param login the login of the client
-         */
-        void successfulAuthentication(String login) {
-            authenticated = true;
-            this.login = login;
-        }
-
-        /**
-         * Process the content of {@code bufferOut}.
-         * <p>
-         * Note: {@code bufferOut} is in <b>write-mode</b> before and after the call.
-         * </p>
-         */
-        void processOut() {
-            while (!queue.isEmpty()) {
-                var buffer = queue.peek();
-                if (bufferOut.remaining() >= buffer.remaining()) {
-                    bufferOut.put(buffer);
-                    queue.poll();
-                } else {
-                    break;
-                }
-            }
-        }
-
-        /**
-         * Performs the read action on {@code socket}.
-         * <p>
-         * Note: {@code bufferIn} and {@code bufferOut} are in <b>write-mode</b> before
-         * and after the call.
-         * </p>
-         *
-         * @throws IOException If some other I/O error occurs.
-         */
-        void doRead() throws IOException {
-            if (socket.read(bufferIn) == -1) {
-                closed = true;
-            }
-            processIn();
-            updateInterestOps();
-        }
-
-        /**
-         * Performs the write action on {@code socket}.
-         * <p>
-         * Note: {@code bufferIn} and {@code bufferOut} are in <b>write-mode</b> before
-         * and after the call.
-         * </p>
-         * @throws IOException If some other I/O error occurs.
-         */
-        void doWrite() throws IOException {
-            bufferOut.flip();
-            socket.write(bufferOut);
-            bufferOut.compact();
-            processOut();
-            updateInterestOps();
-        }
-
-        /**
-         * Returns the current selectionKey of this context;
-         *
-         * @return The key.
-         */
-        public SelectionKey getKey() {
-            return key;
-        }
-
-        /**
-         * Returns the current {@code login} of this context.
-         *
-         * @return The current {@code login}.
-         */
-        public String getLogin() {
-            return login;
-        }
-
-        /**
-         * Adds a message to the queue and process the content of {@code bufferOut}.
-         *
-         * @param buffer The buffer to send.
-         */
-        void queueMessage(ByteBuffer buffer) {
-            queue.add(buffer);
-            processOut();
-            updateInterestOps();
-        }
-
-        /**
-         * Updates the {@code login}, only if the current {@code login} is null.
-         * <p>
-         * Note : We are not allowed to change our {@code login}.
-         * </p>
-         *
-         * @param login The new login link to this context.
-         */
-        public void setLogin(String login) {
-            if (this.login == null) {
-                this.login = Objects.requireNonNull(login);
-            }
-        }
-
-        /**
-         * Try to close the socket. If an exception is thrown, it is ignored.
-         */
-        void silentlyClose() {
-            try {
-                socket.close();
-            } catch (IOException ignored) { }
-        }
-
-        /**
-         *
-         * @param packet
-         */
-        void treatPacket(Packet packet) {
-            packet.accept(visitor);
-        }
-
-        /**
-         * Update the interestOps of the key looking only at values of the boolean
-         * closed and of both ByteBuffers.
-         * <p>
-         * Note: {@code bufferIn} and {@code bufferOut} are in <b>write-mode</b> before
-         * and after the call. {@code process} need to be called just before this method.
-         * </p>
-         */
-        void updateInterestOps() {
-            var interestOps = 0;
-            if (!closed && bufferIn.hasRemaining()) {
-                interestOps |= SelectionKey.OP_READ;
-            }
-            if (bufferOut.position() != 0) {
-                interestOps |= SelectionKey.OP_WRITE;
-            }
-            if (interestOps == 0) {
-                silentlyClose();
-                return;
-            }
-            key.interestOps(interestOps);
-        }
-    }
-
-    /**
      * This class represents a private connection between two clients.
      * <p>
      * A private connection have a unique ID.
      */
     public static class PrivateConnection {
-        private final HashMap<String, Context> privateSockets = new HashMap<>();
+        private final HashMap<String, ServerContext> privateSockets = new HashMap<>();
         private final long id;
         private int nbConnection = 0;
 
@@ -309,7 +111,7 @@ public class Server {
          * @param login the {@code login} of the client
          * @param context the new {@code context}
          */
-        public void updateOneContext(String login, Context context) {
+        public void updateOneContext(String login, ServerContext context) {
             Objects.requireNonNull(login);
             Objects.requireNonNull(context);
             privateSockets.put(login, context);
@@ -329,14 +131,13 @@ public class Server {
         }
     }
 
-    static final int MAX_BUFFER_SIZE = 1024;
     private static final Logger logger = Logger.getLogger(Server.class.getName());
     private final ServerSocketChannel socketPublic;
     private final ServerSocketChannel socketPrivate;
     private SelectionKey privateKey;
     private SelectionKey publicKey;
     private final Selector selector;
-    private final HashSet<String> logins = new HashSet<>(); // à changer si thread
+    private final HashSet<String> logins = new HashSet<>();
     private final int privatePort;
     private final HashMap<String, SelectionKey> publicConnections = new HashMap<>();
     private final HashMap<String, List<PrivateConnection>> privateConnections = new HashMap<>();
@@ -370,8 +171,12 @@ public class Server {
         return id;
     }
 
-    public void registerNewPublicConnection(String login, SelectionKey key) {
-        publicConnections.put(login, key);
+    public boolean registerNewPublicConnection(String login, SelectionKey key) {
+        if (logins.add(Objects.requireNonNull(login))) {
+            publicConnections.put(login, key);
+            return true;
+        }
+        return false;
     }
 
     public Optional<PrivateConnection> getPrivateConnection(String pseudo, long id) {
@@ -489,12 +294,11 @@ public class Server {
         privateConnections.compute(secondLogin, computePrivateConnections(pc));
     }
 
-    private boolean acceptNewClient(String login) {
-        return logins.add(Objects.requireNonNull(login));
-    }
-
-    private void removeOneClient(String login) {
-        logins.remove(Objects.requireNonNull(login));
+    public void deletePrivateConnection(String firstLogin, String secondLogin) {
+        var a = privateConnections.get(firstLogin);
+        a.removeIf(pc -> pc.privateSockets.containsKey(secondLogin));
+        var b = privateConnections.get(secondLogin);
+        b.removeIf(pc -> pc.privateSockets.containsKey(firstLogin));
     }
 
     /**
@@ -508,14 +312,14 @@ public class Server {
             if ((sc = socketPublic.accept()) != null) {
                 sc.configureBlocking(false);
                 var clientKey = sc.register(selector, SelectionKey.OP_READ);
-                clientKey.attach(new Context(this, clientKey));
+                clientKey.attach(new ServerContext(clientKey, this));
                 return;
             }
         } else if (key.equals(privateKey)) {
             if ((sc = socketPrivate.accept()) != null) {
                 sc.configureBlocking(false);
                 var clientKey = sc.register(selector, SelectionKey.OP_READ);
-                clientKey.attach(new Context(this, clientKey));
+                clientKey.attach(new ServerContext(clientKey, this));
                 return;
             }
         }
@@ -536,7 +340,6 @@ public class Server {
         privateKey = socketPrivate.register(selector, SelectionKey.OP_ACCEPT);
 
         while (!Thread.interrupted()) {
-            printKeys();
             try {
                 selector.select(this::treatKey);
             } catch (UncheckedIOException tunneled) {
@@ -589,8 +392,8 @@ public class Server {
      */
 	public void publicBroadcast(Packet packet) {
 	    for (var a : publicConnections.values()) {
-	        var context = (Context) a.attachment();
-            context.queueMessage(packet.asByteBuffer()); // ne peut pas être null
+	        var context = (Context) a.attachment(); // ne peut pas être null
+            context.queueMessage(packet.asByteBuffer());
         }
 	}
 
@@ -603,8 +406,10 @@ public class Server {
      */
     public void privateBroadcast(Packet packet, String login) {
         var key = publicConnections.get(login);
-        var context = (Context) key.attachment();
-        context.queueMessage(packet.asByteBuffer());
+        if (key != null) {
+            var context = (Context) key.attachment();
+            context.queueMessage(packet.asByteBuffer());
+        } // TODO : envoyer un paquet d'erreur au client lui indiquant que le pseudo n'existe pas
     }
 
     /**
@@ -627,72 +432,6 @@ public class Server {
                 return;
             }
         }
-
-    }
-
-
-    ///////////////
-    // A retirer //
-    ///////////////
-
-
-    private String interestOpsToString(SelectionKey key){
-        if (!key.isValid()) {
-            return "CANCELLED";
-        }
-        int interestOps = key.interestOps();
-        ArrayList<String> list = new ArrayList<>();
-        if ((interestOps&SelectionKey.OP_ACCEPT)!=0) list.add("OP_ACCEPT");
-        if ((interestOps&SelectionKey.OP_READ)!=0) list.add("OP_READ");
-        if ((interestOps&SelectionKey.OP_WRITE)!=0) list.add("OP_WRITE");
-        return String.join("|",list);
-    }
-
-    public void printKeys() {
-        Set<SelectionKey> selectionKeySet = selector.keys();
-        if (selectionKeySet.isEmpty()) {
-            System.out.println("The selector contains no key : this should not happen!");
-            return;
-        }
-        System.out.println("The selector contains:");
-        for (SelectionKey key : selectionKeySet){
-            SelectableChannel channel = key.channel();
-            if (channel instanceof ServerSocketChannel) {
-                System.out.println("\tKey for ServerSocketChannel : "+ interestOpsToString(key));
-            } else {
-                SocketChannel sc = (SocketChannel) channel;
-                System.out.println("\tKey for Client "+ remoteAddressToString(sc) +" : "+ interestOpsToString(key));
-            }
-        }
-    }
-
-    private String remoteAddressToString(SocketChannel sc) {
-        try {
-            return sc.getRemoteAddress().toString();
-        } catch (IOException e){
-            return "???";
-        }
-    }
-
-    public void printSelectedKey(SelectionKey key) {
-        SelectableChannel channel = key.channel();
-        if (channel instanceof ServerSocketChannel) {
-            System.out.println("\tServerSocketChannel can perform : " + possibleActionsToString(key));
-        } else {
-            SocketChannel sc = (SocketChannel) channel;
-            System.out.println("\tClient " + remoteAddressToString(sc) + " can perform : " + possibleActionsToString(key));
-        }
-    }
-
-    private String possibleActionsToString(SelectionKey key) {
-        if (!key.isValid()) {
-            return "CANCELLED";
-        }
-        ArrayList<String> list = new ArrayList<>();
-        if (key.isAcceptable()) list.add("ACCEPT");
-        if (key.isReadable()) list.add("READ");
-        if (key.isWritable()) list.add("WRITE");
-        return String.join(" and ",list);
     }
 
     public static void main(String[] args) throws IOException {

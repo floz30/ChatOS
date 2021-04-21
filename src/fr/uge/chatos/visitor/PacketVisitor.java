@@ -3,12 +3,20 @@ package fr.uge.chatos.visitor;
 import fr.uge.chatos.packet.*;
 
 public interface PacketVisitor {
+
     /**
-     * OpCode : 0 et 1.
+     * OpCode : 0.
      *
-     * @param connection
+     * @param connectionRequest
      */
-    void visit(Connection connection);
+    void visit(ConnectionRequest connectionRequest);
+
+    /**
+     * OpCode : 1.
+     *
+     * @param connectionConfirmation
+     */
+    void visit(ConnectionConfirmation connectionConfirmation);
 
     /**
      * OpCode : 2 et 3.
@@ -41,9 +49,20 @@ public interface PacketVisitor {
     /**
      * OpCode : 11.
      *
-     * @param authentication
+     * @param auth
      */
-    void visit(Authentication authentication);
+    void visit(PCAuth auth);
 
+    /**
+     * OpCode : 11.
+     *
+     * @param authConfirmation
+     */
+    void visit(PCAuthConfirmation authConfirmation);
+
+    /**
+     *
+     * @param PCData
+     */
     void visit(PCData PCData);
 }

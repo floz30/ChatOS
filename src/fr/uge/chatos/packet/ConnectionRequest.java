@@ -4,7 +4,7 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
-public class ConnectionRequest implements Connection {
+public class ConnectionRequest implements Packet {
     public String sender;
 
     @Override

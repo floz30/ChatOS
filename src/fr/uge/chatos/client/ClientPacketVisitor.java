@@ -1,5 +1,7 @@
 package fr.uge.chatos.client;
 
+import fr.uge.chatos.context.ClientContext;
+import fr.uge.chatos.context.ClientPublicContext;
 import fr.uge.chatos.packet.*;
 import fr.uge.chatos.visitor.PacketVisitor;
 
@@ -9,21 +11,25 @@ import java.util.logging.Logger;
 public class ClientPacketVisitor implements PacketVisitor {
     private static final Logger logger = Logger.getLogger(ClientPacketVisitor.class.getName());
     private final Client client;
-    private final Client.Context context;
+    //private final ClientContext context;
 
-    public ClientPacketVisitor(Client client, Client.Context context) {
+    public ClientPacketVisitor(Client client, ClientContext context) {
         this.client = Objects.requireNonNull(client);
-        this.context = Objects.requireNonNull(context);
+        //this.context = Objects.requireNonNull(context);
     }
 
     @Override
-    public void visit(Connection connection) {
-        var connectionConfirmation = (ConnectionConfirmation) connection;
+    public void visit(ConnectionConfirmation connectionConfirmation) {
         if (connectionConfirmation.confirm == (byte) 1) {
             System.out.println("Connection success.");
         } else {
             System.out.println("Connection failed.");
         }
+    }
+
+    @Override
+    public void visit(ConnectionRequest connectionRequest) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -52,13 +58,17 @@ public class ClientPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(Authentication authentication) {
-        var pcac = (PCAuthConfirmation) authentication;
+    public void visit(PCAuth auth) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void visit(PCAuthConfirmation pcac) {
         var pcOptional = client.getPrivateConnection(pcac.id);
         if (pcOptional.isPresent()) {
             var entry = pcOptional.get();
             entry.getValue().getContext().successfulAuthentication();
-            System.out.println("Connexion privée avec "+ entry.getKey() +" établie."); // TODO : changer entry.getKey()
+            System.out.println("Connexion privée avec "+ entry.getKey() +" établie.");
         }
 
     }

@@ -1,7 +1,8 @@
-package fr.uge.chatos.visitor;
+package fr.uge.chatos.server;
 
+import fr.uge.chatos.context.ServerContext;
 import fr.uge.chatos.packet.*;
-import fr.uge.chatos.server.Server;
+import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.util.Objects;
 import java.util.logging.Logger;
@@ -9,22 +10,28 @@ import java.util.logging.Logger;
 public class ServerPacketVisitor implements PacketVisitor {
     private static final Logger logger = Logger.getLogger(ServerPacketVisitor.class.getName());
     private final Server server;
-    private final Server.Context context;
+    private final ServerContext context;
 
-    public ServerPacketVisitor(Server server, Server.Context context) {
+    public ServerPacketVisitor(Server server, ServerContext context) {
         this.server = Objects.requireNonNull(server);
         this.context = Objects.requireNonNull(context);
     }
 
     @Override
-    public void visit(Connection connection) {
-        var connectionRequest = (ConnectionRequest) connection; // TODO : vérifier si pas plus opti
-        // TODO : vérifier si pseudo déjà utilisé
+    public void visit(ConnectionRequest connectionRequest) {
         var login = connectionRequest.sender;
         context.setLogin(login);
-        server.registerNewPublicConnection(login, context.getKey());
-        server.privateBroadcast(connectionRequest, login);
-        logger.info(login + " is now connected");
+        if (server.registerNewPublicConnection(login, context.getKey())) {
+            server.privateBroadcast(connectionRequest, login);
+            logger.info(login + " is now connected");
+        } else {
+            // TODO : envoyer un paquet d'erreur au client avant de fermer la connexion
+        }
+    }
+
+    @Override
+    public void visit(ConnectionConfirmation connectionConfirmation) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -55,6 +62,12 @@ public class ServerPacketVisitor implements PacketVisitor {
     public void visit(PCSockets pcs) {
         pcs.port = server.getPrivatePort();
         pcs.recipient = context.getLogin();
+        if (pcs.reply == 0) {
+            server.deletePrivateConnection(pcs.sender, pcs.recipient);
+            // TODO : avertir le sender que la connexion a été refusée
+            logger.info("Refus de connexion privée entre " + pcs.sender + " et " + pcs.recipient);
+            return;
+        }
         var pcOptional = server.getPrivateConnection(pcs.sender, pcs.recipient);
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
@@ -67,8 +80,7 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(Authentication authentication) {
-        var pcc = (PCAuth) authentication;
+    public void visit(PCAuth pcc) {
         var pcOptional = server.getPrivateConnection(pcc.login, pcc.id);
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
@@ -86,6 +98,11 @@ public class ServerPacketVisitor implements PacketVisitor {
                 logger.info("Envoi de la confirmation de l'établissement de la connexion privée");
             }
         }
+    }
+
+    @Override
+    public void visit(PCAuthConfirmation authConfirmation) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
