@@ -10,7 +10,7 @@ public class PCRequest implements Packet {
 
     @Override
     public ByteBuffer asByteBuffer() {
-        return Packets.ofPrivateConnection(sender, (byte) 7).flip();
+        return Packets.ofPrivateConnectionReceiver(sender).flip();
     }
 
     @Override

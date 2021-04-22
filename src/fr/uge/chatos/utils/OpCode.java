@@ -7,10 +7,16 @@ package fr.uge.chatos.utils;
  * will not be the same
  */
 public class OpCode {
+
     /**
-     * This code represents a server error.
+     * This code represents a error and the client can continue to run.
      */
-    public static final byte ERROR = 99;
+    public static final byte ERROR_NO_SHUTDOWN = 98;
+
+    /**
+     * This code represents a server error and the client must be stop.
+     */
+    public static final byte ERROR_SHUTDOWN = 99;
 
     /**
      * This code represents a public connection request.

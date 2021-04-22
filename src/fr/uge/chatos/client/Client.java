@@ -3,17 +3,12 @@ package fr.uge.chatos.client;
 import fr.uge.chatos.context.ClientPrivateContext;
 import fr.uge.chatos.context.ClientPublicContext;
 import fr.uge.chatos.context.Context;
-import fr.uge.chatos.packet.Packet;
-import fr.uge.chatos.packet.PCData;
-import fr.uge.chatos.reader.*;
 import fr.uge.chatos.packet.Packets;
-import fr.uge.chatos.server.Server;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -24,7 +19,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static fr.uge.chatos.utils.OpCode.*;
+
 
 /**
  *
@@ -122,7 +117,7 @@ public class Client {
                 var cmd = Command.extractCommand(tmp);
                 if (cmd.isMessage()) {
                     if (cmd.recipient() != null) {
-                        buffer = Packets.ofPrivateMessage(login, cmd.recipient(), cmd.content(), PRIVATE_SENDER); // message privé
+                        buffer = Packets.ofPrivateMessageSender(login, cmd.recipient(), cmd.content()); // message privé
                     } else {
                         buffer = Packets.ofPublicMessage(login, cmd.content()); // message général
                     }
@@ -134,7 +129,7 @@ public class Client {
                             var confirm = cmd.content().equals("oui") ? (byte) 1 : (byte) 0;
                             buffer = Packets.ofPrivateConnectionReply(cmd.recipient(), confirm);
                         } else { // sinon demande de connexion
-                            buffer = Packets.ofPrivateConnection(cmd.recipient(), PRIVATE_CONNECTION_REQUEST_SENDER);
+                            buffer = Packets.ofPrivateConnectionSender(cmd.recipient());
                         }
                     } else { // sur le port privé
                         if (pc.getContext().isAuthenticated()) {
