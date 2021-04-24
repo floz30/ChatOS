@@ -5,6 +5,7 @@ import fr.uge.chatos.packet.*;
 import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 public class ServerPacketVisitor implements PacketVisitor {
@@ -18,6 +19,16 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
+    public void visit(ErrorShutdown errorShutdown) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void visit(ErrorNoShutdown errorNoShutdown) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void visit(ConnectionRequest connectionRequest) {
         var login = connectionRequest.sender;
         context.setLogin(login);
@@ -25,7 +36,9 @@ public class ServerPacketVisitor implements PacketVisitor {
             server.privateBroadcast(connectionRequest, login);
             logger.info(login + " is now connected");
         } else {
-            // TODO : envoyer un paquet d'erreur au client avant de fermer la connexion
+            var error = new ErrorShutdown("The pseudo \"" + login + "\" is already used by someone else.");
+            server.privateBroadcast(error, context.getKey());
+            // TODO : fermer la connexion
         }
     }
 

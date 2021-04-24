@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -53,6 +54,7 @@ public class Client {
     private final String login;
     private final Object lock = new Object();
     private final Path repository;
+    private SelectionKey publicKey;
     private ClientPublicContext contextPublic;
     private final HashMap<String, PrivateConnection> privateConnections = new HashMap<>();
 
@@ -186,9 +188,9 @@ public class Client {
      */
     private void launch() throws IOException {
         socketPublic.configureBlocking(false);
-        var key = socketPublic.register(selector, SelectionKey.OP_CONNECT);
-        contextPublic = new ClientPublicContext(key, this);
-        key.attach(contextPublic);
+        publicKey = socketPublic.register(selector, SelectionKey.OP_CONNECT);
+        contextPublic = new ClientPublicContext(publicKey, this);
+        publicKey.attach(contextPublic);
         socketPublic.connect(serverAddress);
 
         console.start();
@@ -224,6 +226,26 @@ public class Client {
         }
     }
 
+    /**
+     * Shutdown all private connections and the public one.
+     */
+    public void shutdown() { // TODO : vérifier le fonctionnement de cette méthode
+        for (var pc : privateConnections.values()) {
+            pc.context.silentlyClose();
+        }
+        silentlyClose(publicKey);
+    }
+
+    /**
+     *
+     * @param key
+     */
+    private void silentlyClose(SelectionKey key) {
+        var sc = (Channel) key.channel();
+        try {
+            sc.close();
+        } catch (IOException ignored) { }
+    }
 
     public static void main(String[] args) throws NumberFormatException, IOException {
         if (args.length != 4) {

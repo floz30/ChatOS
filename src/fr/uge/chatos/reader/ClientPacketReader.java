@@ -82,7 +82,7 @@ public class ClientPacketReader implements Reader<Packet> {
                     pcar.reset();
                     currentState = State.DONE;
                 }
-            }
+            } // TODO : ajouter les cas des paquets d'erreur
         }
         return status;
     }

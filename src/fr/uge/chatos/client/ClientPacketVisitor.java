@@ -28,6 +28,17 @@ public class ClientPacketVisitor implements PacketVisitor {
     }
 
     @Override
+    public void visit(ErrorShutdown errorShutdown) {
+        System.out.println("Critical error : " + errorShutdown.getMessage());
+        client.shutdown();
+    }
+
+    @Override
+    public void visit(ErrorNoShutdown errorNoShutdown) {
+        System.out.println("-> Error : " + errorNoShutdown.getMessage());
+    }
+
+    @Override
     public void visit(ConnectionRequest connectionRequest) {
         throw new UnsupportedOperationException();
     }

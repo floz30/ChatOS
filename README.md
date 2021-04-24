@@ -18,7 +18,7 @@ Génère la JavaDoc dans le répertoire `/documentation` :
 ```bash
 ant javadoc
 ```
-Supprime tous les répertoires dédiés à la compilation (ceux créé avec `ant init`) :
+Supprime tous les répertoires dédiés à la compilation (ceux créés avec `ant init`) :
 ```bash
 ant clean
 ```
@@ -37,7 +37,7 @@ ant clean-javadoc
 
 Le serveur prend deux arguments :
 - un entier correspondant à son port public
-- un entier correspondant à port privé
+- un entier correspondant à son port privé
 
 Note : le port public et le port privé ne peuvent pas être identiques.
 ```bash

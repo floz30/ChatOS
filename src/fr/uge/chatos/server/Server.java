@@ -413,6 +413,21 @@ public class Server {
     }
 
     /**
+     * Broadcasts a {@link fr.uge.chatos.packet.Packet} to a {@code client} specified
+     * by his {@code SelectionKey}.
+     * <p>
+     *     Use this method to send error packet.
+     * </p>
+     *
+     * @param packet the packet to send
+     * @param key the selectionKey of the recipient client
+     */
+    public void privateBroadcast(Packet packet, SelectionKey key) {
+        var context = (Context) key.attachment();
+        context.queueMessage(packet.asByteBuffer());
+    }
+
+    /**
      * Broadcasts a {@link fr.uge.chatos.packet.Packet} to a {@code client}
      * via the {@link fr.uge.chatos.server.Server.PrivateConnection}.
      * <p>

@@ -4,6 +4,10 @@ import fr.uge.chatos.packet.*;
 
 public interface PacketVisitor {
 
+    void visit(ErrorShutdown errorShutdown);
+
+    void visit(ErrorNoShutdown errorNoShutdown);
+
     /**
      * OpCode : 0.
      *
