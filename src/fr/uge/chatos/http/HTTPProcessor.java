@@ -10,7 +10,9 @@ public class HTTPProcessor {
     public static void processHTTP(ByteBuffer bb) throws HTTPException {
         var reader = new HTTPReader(bb);
         var header = reader.readHeader();
+        System.out.println(header.getContentLength());
         if(header.getContentType().equals("txt")) {
+            
             var content = reader.readBytes(header.getContentLength()).flip();
             System.out.println(UTF8.decode(content));
         } else {

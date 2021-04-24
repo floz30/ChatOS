@@ -37,6 +37,8 @@ public class ServerContext extends AbstractContext {
     @Override
     public void processIn() {
         if (authenticated) {
+            System.out.println("packet of " + bufferIn.flip().remaining());
+            bufferIn.compact();
             treatPacket(new PCData(bufferIn, login));
         } else {
             super.processIn();

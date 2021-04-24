@@ -23,7 +23,7 @@ public class HTTPReader {
         var nl = false;
         bb.flip();
         while(!nl) {
-            while(bb.hasRemaining()) {
+            if(bb.hasRemaining()) {
                 char c = (char) bb.get();
                 if(c=='\r') {
                     cr = true;
@@ -38,6 +38,7 @@ public class HTTPReader {
             }
         }
         bb.compact();
+        System.out.println(sb.toString());
         return sb.toString().substring(0, sb.length() - 2);
     }
 
@@ -52,7 +53,7 @@ public class HTTPReader {
         var firstLine = readLineCRLF();
         var fields = new HashMap<String, String>();
         String line;
-        while (!(line = readLineCRLF()).isEmpty()) {
+        while (!((line = readLineCRLF()).isEmpty())) {
             var content = line.split(": ");
             fields.put(content[0], content[1]);
         }

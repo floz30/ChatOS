@@ -7,6 +7,9 @@ import fr.uge.chatos.http.HTTPProcessor;
 import fr.uge.chatos.packet.*;
 import fr.uge.chatos.visitor.PacketVisitor;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.logging.Logger;
 
@@ -94,15 +97,18 @@ public class ClientPacketVisitor implements PacketVisitor {
 
     @Override
     public void visit(PrivateFrame privateFrame) {
-        var msg = "";
+        var msg = ByteBuffer.allocate(3);
         var bb = privateFrame.asByteBuffer();
+        Charset ASCII = StandardCharsets.US_ASCII;
+        
         bb.flip();
         for (var b = 0; b < 3; b++) {
-            msg+=bb.get(b);
+            msg.put(bb.get(b));
         }
-        if (msg.equals("GET")) {
+        
+        if (ASCII.decode(msg.flip()).toString().equals("GET")) {
             var httpbb = Packets.ofHTTP(bb, privateFrame);
-            context.queueMessage(httpbb);
+            context.queueMessage(httpbb.flip());
         } else {
             bb.compact();
             try {
