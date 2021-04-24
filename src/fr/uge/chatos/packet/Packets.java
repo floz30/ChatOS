@@ -6,7 +6,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.StringJoiner;
 
 import static fr.uge.chatos.utils.OpCode.*;
@@ -309,7 +308,7 @@ public class Packets {
     }
 
     /**
-     * ByteBuffer : string.
+     * ByteBuffer that contains the GET request
      *
      * @param fn : filename
      * @return
@@ -321,29 +320,46 @@ public class Packets {
         var bb = ByteBuffer.allocate(request.remaining());
         bb.put(request);
         return bb;
-
     }
 
+    private static ByteBuffer findFile(Path path, String fn) {
+        var response = new StringJoiner("\r\n","","\r\n\r\n");
+        
+        if (Files.exists(path)) {
+            var ext = fn.split("\\.")[1]; // TODO: no extension
+            try (var lines = Files.lines(path)) {
+                var file = lines.reduce("", String::concat);
+                file += "\r\n";
+                var content = charset.encode(file);
+                
+                response.add("HTTP/1.1 200 OK");
+                response.add("Content-Length: " + (content.capacity() - 2));
+                response.add("Content-Type: " + ext);
+                
+                var header = ASCII.encode(response.toString());
+                var res = ByteBuffer.allocate(content.capacity() + header.capacity());
+                return res.put(header).put(content);
+            } catch (IOException e) {
+                return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
+            }
+        } else {
+            response.add("HTTP/1.1 404 Not Found");
+            var header = ASCII.encode(response.toString());
+            var res = ByteBuffer.allocate(header.capacity());
+            return res.put(header);
+        }
+    }
+    
+    /**
+     * ByteBuffer that contains the reply to the GET request from the client
+     *
+     * @param
+     * @return
+     */
     public static ByteBuffer ofHTTP(ByteBuffer bb, PrivateFrame privateFrame) {
         var req = ASCII.decode(bb).toString();
         var fn = req.split(" ")[1];
-        
-        try (var lines = Files.lines(Path.of(privateFrame.getRoot() + "/" + fn))) {
-            var file = lines.reduce("", String::concat); //inshAllah c'est bon (j'ai le fichier en un string)
-            file += "\r\n";
-            
-            var content = charset.encode(file);
-            var response = new StringJoiner("\r\n","","\r\n\r\n");
-            var ext = fn.split("\\.")[1];
-            response.add("HTTP/1.1 200 OK");
-            response.add("Content-Length: " + (content.capacity() - 2));
-            response.add("Content-Type: " + ext);
-            var header = ASCII.encode(response.toString());
-            var res = ByteBuffer.allocate(content.capacity() + header.capacity());
-            res.put(header).put(content);
-            return res;
-        } catch (IOException e) {
-            return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
-        }
+        var path = Path.of(privateFrame.getRoot() + "/" + fn); // buggera si on lui écris un path genre /src/file.py
+        return findFile(path, fn);
     }
 }

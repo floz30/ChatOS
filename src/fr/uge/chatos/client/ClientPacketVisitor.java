@@ -1,7 +1,6 @@
 package fr.uge.chatos.client;
 
 import fr.uge.chatos.context.ClientContext;
-import fr.uge.chatos.context.ClientPublicContext;
 import fr.uge.chatos.http.HTTPException;
 import fr.uge.chatos.http.HTTPProcessor;
 import fr.uge.chatos.packet.*;

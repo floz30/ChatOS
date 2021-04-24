@@ -2,16 +2,11 @@ package fr.uge.chatos.http;
 
 import static fr.uge.chatos.http.HTTPException.ensure;
 
-import java.nio.charset.Charset;
 import java.util.*;
 
 public class HTTPHeader {
-
-    /**
-     * Supported versions of the HTTP Protocol
-     */
-
-    private static final String[] LIST_SUPPORTED_VERSIONS = new String[]{"HTTP/1.0", "HTTP/1.1", "HTTP/2.0"};
+    
+    private static final String[] LIST_SUPPORTED_VERSIONS = new String[]{"HTTP/1.1"};
     public static final Set<String> SUPPORTED_VERSIONS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(LIST_SUPPORTED_VERSIONS)));
 
 
@@ -90,40 +85,6 @@ public class HTTPHeader {
             return s.split(";")[0].trim();
         } else
             return null;
-    }
-
-    /**
-     * @return the charset corresponding to the Content-Type field
-     *         null if charset is unknown or unavailable on the JVM
-     */
-    public Charset getCharset() {
-        Charset cs = null;
-        String s = fields.get("content-type");
-        if (s == null) return cs;
-        for (String t : s.split(";")) {
-            if (t.contains("charset=")) {
-                try {
-                    cs= Charset.forName(t.split("=")[1].trim());
-                } catch (Exception e) {
-                    // If the Charset is unknown or unavailable we turn null
-                }
-                return cs;
-            }
-        }
-        return cs;
-    }
-
-    /**
-     * @return true if the header correspond to a chunked response
-     */
-    public boolean isChunkedTransfer() {
-        return fields.containsKey("transfer-encoding") && fields.get("transfer-encoding").trim().equals("chunked");
-    }
-
-    public String toString() {
-        return response + "\n"
-                + version + " " + code + "\n"
-                + fields.toString();
     }
 
 
