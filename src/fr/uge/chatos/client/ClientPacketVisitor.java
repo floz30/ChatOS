@@ -2,6 +2,8 @@ package fr.uge.chatos.client;
 
 import fr.uge.chatos.context.ClientContext;
 import fr.uge.chatos.context.ClientPublicContext;
+import fr.uge.chatos.http.HTTPException;
+import fr.uge.chatos.http.HTTPProcessor;
 import fr.uge.chatos.packet.*;
 import fr.uge.chatos.visitor.PacketVisitor;
 
@@ -11,11 +13,11 @@ import java.util.logging.Logger;
 public class ClientPacketVisitor implements PacketVisitor {
     private static final Logger logger = Logger.getLogger(ClientPacketVisitor.class.getName());
     private final Client client;
-    //private final ClientContext context;
+    private final ClientContext context;
 
     public ClientPacketVisitor(Client client, ClientContext context) {
         this.client = Objects.requireNonNull(client);
-        //this.context = Objects.requireNonNull(context);
+        this.context = Objects.requireNonNull(context);
     }
 
     @Override
@@ -88,5 +90,26 @@ public class ClientPacketVisitor implements PacketVisitor {
     public void visit(PCData PCData) {
         // appel client HTTP
         logger.info("HTTP reçu");
+    }
+
+    @Override
+    public void visit(PrivateFrame privateFrame) {
+        var msg = "";
+        var bb = privateFrame.asByteBuffer();
+        bb.flip();
+        for (var b = 0; b < 3; b++) {
+            msg+=bb.get(b);
+        }
+        if (msg.equals("GET")) {
+            var httpbb = Packets.ofHTTP(bb, privateFrame);
+            context.queueMessage(httpbb);
+        } else {
+            bb.compact();
+            try {
+                HTTPProcessor.processHTTP(bb);
+            } catch (HTTPException e) {
+                System.out.println("HTTPException encountered with [" + privateFrame.getDst() +"]:\n"+ e.getMessage());
+            }
+        }
     }
 }

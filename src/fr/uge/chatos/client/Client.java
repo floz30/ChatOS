@@ -53,7 +53,7 @@ public class Client {
     private final Thread console;
     private final String login;
     private final Object lock = new Object();
-    private final Path repository;
+    private final String repository;
     private SelectionKey publicKey;
     private ClientPublicContext contextPublic;
     private final HashMap<String, PrivateConnection> privateConnections = new HashMap<>();
@@ -65,7 +65,11 @@ public class Client {
         selector = Selector.open();
         console = new Thread(this::consoleRun);
         console.setDaemon(true);
-        this.repository = Paths.get(repository);
+        this.repository = repository;
+    }
+
+    public String getRepository() {
+        return repository;
     }
 
     /**
@@ -136,8 +140,7 @@ public class Client {
                     } else { // sur le port privé
                         if (pc.getContext().isAuthenticated()) {
                             // si déjà authentifié appel du client http
-                            buffer = ByteBuffer.allocate(4); // TODO : à changer avec HTTP
-                            buffer.putInt(3);
+                            buffer = Packets.ofGETRequest(cmd.content(), serverAddress.getHostName());
                             System.out.println("authentifié et envoi http");
                         } else {
                             // si en cours d'authentification envoi de la réponse

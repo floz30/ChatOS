@@ -69,4 +69,6 @@ public interface PacketVisitor {
      * @param PCData
      */
     void visit(PCData PCData);
+
+    void visit(PrivateFrame request);
 }

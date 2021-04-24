@@ -5,6 +5,7 @@ import fr.uge.chatos.client.ClientPacketVisitor;
 import fr.uge.chatos.packet.PCData;
 import fr.uge.chatos.packet.Packet;
 import fr.uge.chatos.packet.Packets;
+import fr.uge.chatos.packet.PrivateFrame;
 import fr.uge.chatos.reader.ClientPacketReader;
 
 import java.io.IOException;
@@ -40,7 +41,8 @@ public class ClientPrivateContext extends AbstractContext implements ClientConte
     @Override
     public void processIn() {
         if (authenticated) {
-            treatPacket(new PCData(bufferIn, ""));
+            var dst = client.getPrivateConnection(id).get().getKey();
+            treatPacket(new PrivateFrame(bufferIn, dst, client.getRepository()));
         } else {
             super.processIn();
         }
