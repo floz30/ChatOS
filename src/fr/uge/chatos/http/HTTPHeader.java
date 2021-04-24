@@ -1,9 +1,9 @@
-package fr.uge.chatos.utils;
+package fr.uge.chatos.http;
+
+import static fr.uge.chatos.http.HTTPException.ensure;
 
 import java.nio.charset.Charset;
 import java.util.*;
-
-import static fr.uge.chatos.utils.HTTPException.ensure;
 
 public class HTTPHeader {
 

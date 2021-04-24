@@ -90,14 +90,17 @@ public class ServerPacketVisitor implements PacketVisitor {
 
     @Override
     public void visit(PCData PCData) {
-        var pcOptional = server.getPrivateConnection(PCData.sender, context.getKey());
+        var pcOptional = server.getPrivateConnection(PCData.getSender(), context.getKey());
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
-
-            server.privateConnectionBroadcast(PCData, pc, PCData.sender);
+            server.privateConnectionBroadcast(PCData, pc, PCData.getSender());
             logger.info("Transfert de données sur la connexion privée entre " + pc.getPseudos());
-
         }
+    }
 
+    @Override
+    public void visit(PrivateFrame request) {
+        // TODO Auto-generated method stub
+        
     }
 }

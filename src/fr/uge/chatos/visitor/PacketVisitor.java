@@ -46,4 +46,6 @@ public interface PacketVisitor {
     void visit(Authentication authentication);
 
     void visit(PCData PCData);
+    
+    void visit(PrivateFrame request);
 }

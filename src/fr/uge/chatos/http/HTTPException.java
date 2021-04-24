@@ -1,4 +1,4 @@
-package fr.uge.chatos.utils;
+package fr.uge.chatos.http;
 
 import java.io.IOException;
 import java.io.Serial;

@@ -50,7 +50,8 @@ public class Server {
          */
         void processIn() {
             if (authenticated) {
-                treatPacket(new PCData(bufferIn, login));
+                treatPacket(new PCData(bufferIn, login)); //visit
+                
             } else {
                 for (;;) {
                     var status = serverPacketReader.process(bufferIn);

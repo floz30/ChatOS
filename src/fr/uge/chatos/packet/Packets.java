@@ -2,13 +2,18 @@ package fr.uge.chatos.packet;
 
 import fr.uge.chatos.utils.OpCode;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.StringJoiner;
 
 public class Packets {
     private static final Charset charset = StandardCharsets.UTF_8;
-
+    private static final Charset ASCII = StandardCharsets.US_ASCII;
+    
     /**
      * Create a ByteBuffer : byte | int | string.
      * OpCode = 0.
@@ -192,5 +197,43 @@ public class Packets {
         result.put(OpCode.ERROR)
                 .putInt(contentBuffer.remaining()).put(contentBuffer);
         return result;
+    }
+    
+    /**
+     * ByteBuffer : string.
+     * 
+     * @param fn : filename
+     * @return
+     */
+     public static ByteBuffer ofGETRequest(String fn, String host) {
+         var request = ASCII.encode("GET " + fn + " HTTP/1.1\r\n"
+                 + "Host: " + host + "\r\n"
+                 + "\r\n");
+         var bb = ByteBuffer.allocate(request.remaining());
+         bb.put(request);
+         return bb;
+         
+     }
+
+    public static ByteBuffer ofHTTP(ByteBuffer bb, PrivateFrame privateFrame) {
+        var req = ASCII.decode(bb).toString();
+        var fn = req.split(" \r\n")[2].split(".")[1]; //TODO: fichier sans extension
+        
+        try (var lines = Files.lines(Path.of(privateFrame.getRoot() + fn))) {
+            var file = lines.reduce("", String::concat); //inshAllah c'est bon (j'ai le fichier en un string)
+            file += "\r\n";
+            
+            var content = charset.encode(file);
+            var response = new StringJoiner("\r\n");
+            response.add("HTTP/1.1 200 OK");
+            response.add("Content-Length: " + content.capacity());
+            response.add("Content-Type: " + fn);
+            
+            var header = ASCII.encode(response.toString() + "\r\n");
+            var res = ByteBuffer.allocate(content.capacity() + header.capacity());
+            return res.put(header).put(content);
+        } catch (IOException e) {
+            return ofErrorBuffer("an I/O error occurs opening the file");
+        }
     }
 }

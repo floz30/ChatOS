@@ -1,6 +1,8 @@
 package fr.uge.chatos.visitor;
 
 import fr.uge.chatos.client.Client;
+import fr.uge.chatos.http.HTTPException;
+import fr.uge.chatos.http.HTTPProcessor;
 import fr.uge.chatos.packet.*;
 
 import java.util.Objects;
@@ -65,8 +67,25 @@ public class ClientPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PCData PCData) {
-        // appel client HTTP
-        logger.info("HTTP reçu");
+    public void visit(PCData PCData) {}
+    
+    public void visit(PrivateFrame privateFrame) {
+        var msg = "";
+        var bb = privateFrame.asByteBuffer();
+        bb.flip();
+        for (var b = 0; b < 3; b++) {
+          msg+=bb.get(b);
+        }
+        if (msg.equals("GET")) {
+            var httpbb = Packets.ofHTTP(bb, privateFrame);
+            context.queueMessage(httpbb);
+        } else {
+            bb.compact();
+            try {
+                HTTPProcessor.processHTTP(bb);
+            } catch (HTTPException e) {
+                System.out.println("HTTPException encountered with [" + privateFrame.getDst() +"]:\n"+ e.getMessage());
+            }
+        }
     }
 }

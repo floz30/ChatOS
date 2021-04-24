@@ -1,6 +1,7 @@
 package fr.uge.chatos.client;
 
 import fr.uge.chatos.packet.Packet;
+import fr.uge.chatos.packet.PrivateFrame;
 import fr.uge.chatos.packet.PCData;
 import fr.uge.chatos.reader.*;
 import fr.uge.chatos.packet.Packets;
@@ -14,8 +15,6 @@ import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.function.Function;
@@ -157,7 +156,7 @@ public class Client {
          *
          * @param buffer The buffer to send.
          */
-        void queueMessage(ByteBuffer buffer) {
+        public void queueMessage(ByteBuffer buffer) {
             queue.add(buffer);
             processOut();
             updateInterestOps();
@@ -228,7 +227,8 @@ public class Client {
         @Override
         void processIn() {
             if (authenticated) {
-                treatPacket(new PCData(bufferIn, "")); // TODO : à revoir
+                var dst = getPrivateConnection(id).get().getKey();
+                treatPacket(new PrivateFrame(bufferIn, dst, root)); // TODO : à revoir
             } else {
                 super.processIn();
             }
@@ -273,18 +273,18 @@ public class Client {
     private final Thread console;
     private final String login;
     private final Object lock = new Object();
-    private final Path repository;
+    private final String root;
     private ContextPublic contextPublic;
     private final HashMap<String, PC> privateConnections = new HashMap<>();
 
-    public Client(String login, InetSocketAddress serverAddress, String repository) throws IOException {
+    public Client(String login, InetSocketAddress serverAddress, String root) throws IOException {
         this.serverAddress = Objects.requireNonNull(serverAddress);
         this.login = Objects.requireNonNull(login);
         socketPublic = SocketChannel.open();
         selector = Selector.open();
         console = new Thread(this::consoleRun);
         console.setDaemon(true);
-        this.repository = Paths.get(repository);
+        this.root = root;
     }
 
     public String getLogin() {
@@ -380,16 +380,13 @@ public class Client {
                         if (cmd.content.equals("oui") || cmd.content.equals("non")) { // si confirmation de la connexion
                             var confirm = cmd.content.equals("oui") ? (byte) 1 : (byte) 0;
                             buffer = Packets.ofPrivateConnectionReply(cmd.recipient, confirm);
-                            //connections.put(cmd.recipient, new ContextPrivate(ke));
                         } else { // sinon demande de connexion
                             buffer = Packets.ofPrivateConnection(cmd.recipient, PRIVATE_CONNECTION_REQUEST_SENDER);
-                            //connections.put(cmd.recipient, new Connection(cmd.recipient, cmd.content));
                         }
                     } else { // sur le port privé
                         if (pc.getContext().authenticated) {
                             // si déjà authentifié appel du client http
-                            buffer = ByteBuffer.allocate(4);
-                            buffer.putInt(3);
+                            buffer = Packets.ofGETRequest(cmd.content, serverAddress.getHostName());
                             System.out.println("authentifié et envoi http");
                         } else {
                             // si en cours d'authentification envoi de la réponse
