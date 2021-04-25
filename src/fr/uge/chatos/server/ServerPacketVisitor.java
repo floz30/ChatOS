@@ -119,12 +119,11 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PCData PCData) {
-        var pcOptional = server.getPrivateConnection(PCData.getSender(), context.getKey());
+    public void visit(PCData data) {
+        var pcOptional = server.getPrivateConnection(data.getSender(), context.getKey());
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
-
-            server.privateConnectionBroadcast(PCData, pc, PCData.getSender());
+            server.privateConnectionBroadcast(data, pc, data.getSender());
             logger.info("Transfert de données sur la connexion privée entre " + pc.getPseudos());
 
         }
@@ -132,7 +131,13 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PrivateFrame request) {
+    public void visit(HttpRequest httpRequest) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public void visit(HttpData httpData) {
+        throw new UnsupportedOperationException();
+    }
+
 }

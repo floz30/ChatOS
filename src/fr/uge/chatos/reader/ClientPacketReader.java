@@ -16,6 +16,8 @@ public class ClientPacketReader implements Reader<Packet> {
     private final PCRequestReader PCRequestReader = new PCRequestReader();
     private final PCSocketsReader PCSocketsReader = new PCSocketsReader();
     private final PCAuthConfirmationReader pcar = new PCAuthConfirmationReader();
+    private final HttpRequestReader httpRequestReader = new HttpRequestReader();
+    private final HttpDataReader httpDataReader = new HttpDataReader();
     private State currentState = State.WAITING_PACKET;
     private Packet packet;
 
@@ -26,17 +28,23 @@ public class ClientPacketReader implements Reader<Packet> {
         }
 
         buffer.flip();
-        if (!buffer.hasRemaining()) {
+        var internalBuffer = ByteBuffer.allocate(buffer.remaining());
+        internalBuffer.put(buffer);
+        internalBuffer.flip();
+        //buffer.rewind();
+
+        if (!internalBuffer.hasRemaining()) {
             buffer.compact();
             return ProcessStatus.REFILL;
         }
-        var opCode = buffer.get();
-        buffer.compact();
+        var opCode = internalBuffer.get();
+        //buffer.compact();
+        internalBuffer.compact();
 
         var status = ProcessStatus.ERROR;
         switch (opCode) {
             case CONNECTION_ACCEPT -> {
-                status = byteReader.process(buffer); // on utilise directement un ByteReader (+ simple)
+                status = byteReader.process(internalBuffer); // on utilise directement un ByteReader (+ simple)
                 if (status == ProcessStatus.DONE) {
                     packet = new ConnectionConfirmation(byteReader.get());
                     connectionRequestReader.reset();
@@ -44,7 +52,7 @@ public class ClientPacketReader implements Reader<Packet> {
                 }
             }
             case GENERAL_RECEIVER -> {
-                status = publicMessageReader.process(buffer);
+                status = publicMessageReader.process(internalBuffer);
                 if (status == ProcessStatus.DONE) {
                     packet = publicMessageReader.get();
                     publicMessageReader.reset();
@@ -52,7 +60,7 @@ public class ClientPacketReader implements Reader<Packet> {
                 }
             }
             case PRIVATE_RECEIVER -> {
-                status = privateMessageReader.process(buffer);
+                status = privateMessageReader.process(internalBuffer);
                 if (status == ProcessStatus.DONE) {
                     packet = privateMessageReader.get();
                     privateMessageReader.reset();
@@ -60,7 +68,7 @@ public class ClientPacketReader implements Reader<Packet> {
                 }
             }
             case PRIVATE_CONNECTION_REQUEST_RECEIVER -> {
-                status = PCRequestReader.process(buffer);
+                status = PCRequestReader.process(internalBuffer);
                 if (status == ProcessStatus.DONE) {
                     packet = PCRequestReader.get();
                     PCRequestReader.reset();
@@ -68,7 +76,7 @@ public class ClientPacketReader implements Reader<Packet> {
                 }
             }
             case PRIVATE_CONNECTION_SOCKETS -> {
-                status = PCSocketsReader.process(buffer);
+                status = PCSocketsReader.process(internalBuffer);
                 if (status == ProcessStatus.DONE) {
                     packet = PCSocketsReader.get();
                     PCSocketsReader.reset();
@@ -76,14 +84,37 @@ public class ClientPacketReader implements Reader<Packet> {
                 }
             }
             case PRIVATE_CONNECTION_CONFIRMATION -> {
-                status = pcar.process(buffer);
+                status = pcar.process(internalBuffer);
                 if (status == ProcessStatus.DONE) {
                     packet = pcar.get();
                     pcar.reset();
                     currentState = State.DONE;
                 }
             } // TODO : ajouter les cas des paquets d'erreur
+            case 71 -> { // GET request
+                internalBuffer.flip();
+                var b = ByteBuffer.allocate(internalBuffer.remaining() + Byte.BYTES);
+                b.put(opCode).put(internalBuffer);
+                status = httpRequestReader.process(b);
+                if (status == ProcessStatus.DONE) {
+                    packet = httpRequestReader.get();
+                    httpRequestReader.reset();
+                    currentState = State.DONE;
+                }
+            }
+            case 72 -> { // HTTP response
+                internalBuffer.flip();
+                var b = ByteBuffer.allocate(internalBuffer.remaining() + Byte.BYTES);
+                b.put(opCode).put(internalBuffer);
+                status = httpDataReader.process(b);
+                if (status == ProcessStatus.DONE) {
+                    packet = httpDataReader.get();
+                    httpDataReader.reset();
+                    currentState = State.DONE;
+                }
+            }
         }
+        buffer.compact();
         return status;
     }
 

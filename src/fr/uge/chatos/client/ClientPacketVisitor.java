@@ -1,12 +1,12 @@
 package fr.uge.chatos.client;
 
 import fr.uge.chatos.context.ClientContext;
-import fr.uge.chatos.context.ClientPublicContext;
-import fr.uge.chatos.http.HTTPException;
-import fr.uge.chatos.http.HTTPProcessor;
+import fr.uge.chatos.context.ClientPrivateContext;
 import fr.uge.chatos.packet.*;
 import fr.uge.chatos.visitor.PacketVisitor;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.logging.Logger;
 
@@ -83,33 +83,35 @@ public class ClientPacketVisitor implements PacketVisitor {
             entry.getValue().getContext().successfulAuthentication();
             System.out.println("Connexion privée avec "+ entry.getKey() +" établie.");
         }
-
     }
 
     @Override
-    public void visit(PCData PCData) {
-        // appel client HTTP
-        logger.info("HTTP reçu");
+    public void visit(PCData data) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public void visit(PrivateFrame privateFrame) {
-        var msg = "";
-        var bb = privateFrame.asByteBuffer();
-        bb.flip();
-        for (var b = 0; b < 3; b++) {
-            msg+=bb.get(b);
-        }
-        if (msg.equals("GET")) {
-            var httpbb = Packets.ofHTTP(bb, privateFrame);
-            context.queueMessage(httpbb);
+    public void visit(HttpRequest httpRequest) {
+        //logger.info("HTTP request reçu");
+        var path = client.getRepository() + "/" + httpRequest.getFilename();
+        var buffer = Packets.ofHTTPResponse(path);
+        context.queueMessage(buffer.flip());
+    }
+
+    @Override
+    public void visit(HttpData httpData) {
+        //logger.info("HTTP response reçu");
+        if (httpData.getHeader().getContentType().equals("txt")) {
+            System.out.println("Contenu du fichier : \n\t" + httpData.getBody());
         } else {
-            bb.compact();
-            try {
-                HTTPProcessor.processHTTP(bb);
-            } catch (HTTPException e) {
-                System.out.println("HTTPException encountered with [" + privateFrame.getDst() +"]:\n"+ e.getMessage());
+            var c = (ClientPrivateContext) context;
+            var path = client.getRepository() + "/" + c.getFileRequested();
+            try (var s = new FileOutputStream(path)) {
+                s.write(httpData.getContentBody());
+            } catch (IOException e) {
+                System.out.println("-> Erreur lors de la sauvegarde du fichier");
             }
         }
     }
+
 }

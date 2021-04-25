@@ -66,9 +66,12 @@ public interface PacketVisitor {
 
     /**
      *
-     * @param PCData
+     * @param data
      */
-    void visit(PCData PCData);
+    void visit(PCData data);
 
-    void visit(PrivateFrame request);
+    void visit(HttpRequest httpRequest);
+
+    void visit(HttpData httpData);
+
 }

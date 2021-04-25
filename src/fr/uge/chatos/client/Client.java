@@ -13,8 +13,6 @@ import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.logging.Level;
@@ -140,8 +138,9 @@ public class Client {
                     } else { // sur le port privé
                         if (pc.getContext().isAuthenticated()) {
                             // si déjà authentifié appel du client http
-                            buffer = Packets.ofGETRequest(cmd.content(), serverAddress.getHostName());
-                            System.out.println("authentifié et envoi http");
+                            buffer = Packets.ofHTTPRequest(cmd.content(), serverAddress.getHostName());
+                            pc.getContext().setFileRequested(cmd.content());
+                            System.out.println("Envoi requête HTTP");
                         } else {
                             // si en cours d'authentification envoi de la réponse
                             buffer = Packets.ofAuthentication(pc.getContext().getId(), login);
