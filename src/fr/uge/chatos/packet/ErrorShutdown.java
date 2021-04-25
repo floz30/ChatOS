@@ -5,6 +5,11 @@ import fr.uge.chatos.visitor.PacketVisitor;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
+/**
+ * Represent a frame containing a error.
+ *
+ */
+
 public class ErrorShutdown implements Packet {
     private final String message;
 

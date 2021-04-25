@@ -4,6 +4,11 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represent a frame containing a message for every user in the server.
+ * 
+ */
+
 public class PublicMessage implements Packet {
     public String sender;
     public String content;

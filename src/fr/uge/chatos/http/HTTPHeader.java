@@ -5,6 +5,10 @@ import static fr.uge.chatos.http.HTTPException.ensure;
 import java.nio.charset.Charset;
 import java.util.*;
 
+/**
+ * This class collects the information on a HTTP header.
+ */
+
 public class HTTPHeader {
 
     /**

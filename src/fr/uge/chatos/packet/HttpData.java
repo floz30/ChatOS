@@ -8,6 +8,11 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
 
+/**
+ * Represent a frame containing a HTTP Response.
+ *
+ */
+
 public class HttpData implements Packet {
     private final HTTPHeader header;
     private final String body;

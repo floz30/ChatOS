@@ -54,18 +54,28 @@ public class ServerPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Send a message to everyone.
+     */
     @Override
     public void visit(PublicMessage publicMessage) {
         server.publicBroadcast(publicMessage);
         logger.info(publicMessage.sender + " send a public message");
     }
 
+    /**
+     * Send a private message.
+     */
     @Override
     public void visit(PrivateMessage privateMessage) {
         server.privateBroadcast(privateMessage, privateMessage.recipient);
         logger.info(privateMessage.sender + " send a private message to " + privateMessage.recipient);
     }
 
+    /**
+     * Send the private connection request.
+     */
+    
     @Override
     public void visit(PCRequest pcr) {
         pcr.sender = context.getLogin();
@@ -78,6 +88,10 @@ public class ServerPacketVisitor implements PacketVisitor {
         logger.info("Demande de confirmation pour la connexion privée entre : " + pcr.sender + " et " + pcr.recipient);
     }
 
+    /**
+     * Send private connection's id to both user connected by the private port.
+     */
+    
     @Override
     public void visit(PCSockets pcs) {
         pcs.port = server.getPrivatePort();
@@ -96,9 +110,11 @@ public class ServerPacketVisitor implements PacketVisitor {
             server.privateBroadcast(pcs, pcs.recipient);
             logger.info("Envoi de l'identifiant et du numéro de port");
         }
-
     }
 
+    /**
+     * Authentificate both user 
+     */
     @Override
     public void visit(PCAuth pcc) {
         var pcOptional = server.getPrivateConnection(pcc.login, pcc.id);

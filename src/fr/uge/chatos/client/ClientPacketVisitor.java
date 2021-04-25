@@ -36,17 +36,25 @@ public class ClientPacketVisitor implements PacketVisitor {
         }
     }
 
+    /**
+     * display error and shutdown connection with server.
+     */
     @Override
     public void visit(ErrorShutdown errorShutdown) {
         System.out.println("Critical error : " + errorShutdown.getMessage());
         client.shutdown();
     }
 
+    /**
+     * display error.
+     */
+    
     @Override
     public void visit(ErrorNoShutdown errorNoShutdown) {
         System.out.println("-> Error : " + errorNoShutdown.getMessage());
     }
 
+    
     @Override
     public void visit(ConnectionRequest connectionRequest) {
         throw new UnsupportedOperationException();
@@ -83,6 +91,9 @@ public class ClientPacketVisitor implements PacketVisitor {
         System.out.println(msg);
     }
 
+    /**
+     * Connect the client to the private port.
+     */
     @Override
     public void visit(PCSockets PCSockets) {
         client.startPrivateConnection(PCSockets.port, PCSockets.sender, PCSockets.id);
@@ -93,6 +104,9 @@ public class ClientPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Display server's response to private connection authentication.
+     */
     @Override
     public void visit(PCAuthConfirmation pcac) {
         var pcOptional = client.getPrivateConnection(pcac.id);

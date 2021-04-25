@@ -7,7 +7,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-
+/**
+ * Represent a frame containing HTTP Request.
+ *
+ */
 public class HttpRequest implements Packet {
     private final String type;
     private final String filename;
@@ -21,6 +24,11 @@ public class HttpRequest implements Packet {
         this.fields = Collections.unmodifiableMap(fields);
     }
 
+    /**
+     * Returns the filename in which the request was made.
+     * @return
+     */
+    
     public String getFilename() {
         return filename;
     }

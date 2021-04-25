@@ -209,7 +209,8 @@ public class Client {
     }
 
     /**
-     *
+     * Use the key attachment to either write or read.
+     * 
      * @param key
      */
     private void treatKey(SelectionKey key) {

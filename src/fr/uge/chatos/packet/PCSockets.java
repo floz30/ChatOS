@@ -4,6 +4,11 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represent a frame containing the necessary information of the private connection for both user.
+ * 
+ */
+
 public class PCSockets implements Packet {
     public String sender;
     public String recipient;
