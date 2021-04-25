@@ -15,7 +15,7 @@ public class PublicMessage implements Packet {
 
     @Override
     public ByteBuffer asByteBuffer() {
-        return Packets.ofMessageReader(sender, content, (byte)3).flip();
+        return Packets.ofPublicMessageReceiver(sender, content).flip();
     }
 
     @Override

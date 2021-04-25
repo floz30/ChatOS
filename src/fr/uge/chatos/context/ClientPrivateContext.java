@@ -51,16 +51,6 @@ public class ClientPrivateContext extends AbstractContext implements ClientConte
         return fileRequested;
     }
 
-    @Override
-    public void processIn() {
-//        if (authenticated) {
-//            //var dst = client.getPrivateConnection(id).get().getKey();
-//            treatPacket(new PCData(bufferIn, client.getLogin(), client.getRepository()));
-//        } else {
-            super.processIn();
-       // }
-    }
-
     /**
      * Updates this context by indicating that he is authenticated.
      */

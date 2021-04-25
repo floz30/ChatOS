@@ -11,7 +11,11 @@ import java.util.Objects;
  */
 
 public class ErrorShutdown implements Packet {
-    private final String message;
+    private String message;
+
+    public ErrorShutdown() {
+
+    }
 
     public ErrorShutdown(String message) {
         this.message = Objects.requireNonNull(message);
@@ -19,6 +23,10 @@ public class ErrorShutdown implements Packet {
 
     public String getMessage() {
         return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     @Override

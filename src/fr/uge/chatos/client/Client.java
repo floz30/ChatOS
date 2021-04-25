@@ -124,7 +124,7 @@ public class Client {
                     if (cmd.recipient() != null) {
                         buffer = Packets.ofPrivateMessageSender(login, cmd.recipient(), cmd.content()); // message privé
                     } else {
-                        buffer = Packets.ofPublicMessage(login, cmd.content()); // message général
+                        buffer = Packets.ofPublicMessageSender(login, cmd.content()); // message général
                     }
                 } else {
                     // Connexion privée
@@ -234,10 +234,10 @@ public class Client {
      * Shutdown all private connections and the public one.
      */
     public void shutdown() { // TODO : vérifier le fonctionnement de cette méthode
-        for (var pc : privateConnections.values()) {
-            pc.context.silentlyClose();
-        }
-        silentlyClose(publicKey);
+//        for (var pc : privateConnections.values()) {
+//            pc.context.silentlyClose();
+//        }
+//        silentlyClose(publicKey);
     }
 
     /**

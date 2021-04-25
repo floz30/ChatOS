@@ -10,7 +10,6 @@ public class HttpRequestReader implements Reader<HttpRequest> {
     private final HttpLineCRLFReader crlfReader = new HttpLineCRLFReader();
     private State currentState = State.WAITING_FIRST_LINE;
     private String firstLine;
-    private HashMap<String, String> fields = new HashMap<>();
 
     @Override
     public ProcessStatus process(ByteBuffer buffer) {
@@ -40,10 +39,7 @@ public class HttpRequestReader implements Reader<HttpRequest> {
                     var line = crlfReader.get();
                     if (line.length() <= 2) {
                         currentState = State.DONE;
-                    } else {
-                        var content = line.split(":", 2);
-                        fields.put(content[0], content[1]);
-                    }
+                    } // do nothing
                     crlfReader.reset();
                 } else {
                     return status;
@@ -60,13 +56,12 @@ public class HttpRequestReader implements Reader<HttpRequest> {
         if (currentState != State.DONE) {
             throw new IllegalStateException();
         }
-        return HttpRequest.create(firstLine, fields);
+        return HttpRequest.create(firstLine);
     }
 
     @Override
     public void reset() {
         currentState = State.WAITING_FIRST_LINE;
         firstLine = "";
-        fields = new HashMap<>();
     }
 }

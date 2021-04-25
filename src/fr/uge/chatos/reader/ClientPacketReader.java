@@ -18,6 +18,8 @@ public class ClientPacketReader implements Reader<Packet> {
     private final PCAuthConfirmationReader pcar = new PCAuthConfirmationReader();
     private final HttpRequestReader httpRequestReader = new HttpRequestReader();
     private final HttpDataReader httpDataReader = new HttpDataReader();
+    private final ErrorShutdownReader errorShutdownReader =  new ErrorShutdownReader();
+    private final ErrorNoShutdownReader errorNoShutdownReader = new ErrorNoShutdownReader();
     private State currentState = State.WAITING_PACKET;
     private Packet packet;
 
@@ -31,14 +33,11 @@ public class ClientPacketReader implements Reader<Packet> {
         var internalBuffer = ByteBuffer.allocate(buffer.remaining());
         internalBuffer.put(buffer);
         internalBuffer.flip();
-        //buffer.rewind();
-
         if (!internalBuffer.hasRemaining()) {
             buffer.compact();
             return ProcessStatus.REFILL;
         }
         var opCode = internalBuffer.get();
-        //buffer.compact();
         internalBuffer.compact();
 
         var status = ProcessStatus.ERROR;
@@ -110,6 +109,22 @@ public class ClientPacketReader implements Reader<Packet> {
                 if (status == ProcessStatus.DONE) {
                     packet = httpDataReader.get();
                     httpDataReader.reset();
+                    currentState = State.DONE;
+                }
+            }
+            case ERROR_NO_SHUTDOWN -> {
+                status = errorNoShutdownReader.process(internalBuffer);
+                if (status == ProcessStatus.DONE) {
+                    packet = errorNoShutdownReader.get();
+                    errorNoShutdownReader.reset();
+                    currentState = State.DONE;
+                }
+            }
+            case ERROR_SHUTDOWN -> {
+                status = errorShutdownReader.process(internalBuffer);
+                if (status == ProcessStatus.DONE) {
+                    packet = errorShutdownReader.get();
+                    errorShutdownReader.reset();
                     currentState = State.DONE;
                 }
             }

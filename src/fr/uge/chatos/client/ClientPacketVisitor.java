@@ -143,6 +143,10 @@ public class ClientPacketVisitor implements PacketVisitor {
     
     @Override
     public void visit(HttpData httpData) {
+        if (httpData.getHeader().getCode() == 404) {
+            System.out.println("-> Erreur : fichier non trouvé");
+            return;
+        }
         if (httpData.getHeader().getContentType().equals("txt")) {
             System.out.println("Contenu du fichier : \n\t" + httpData.getBody());
         } else {

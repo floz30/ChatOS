@@ -72,7 +72,7 @@ public class Packets {
      * @param content the content of the public message
      * @return a {@code ByteBuffer} in <b>write-mode</b>
      */
-    public static ByteBuffer ofPublicMessage(String sender, String content) {
+    public static ByteBuffer ofPublicMessageSender(String sender, String content) {
         var contentBuffer = charset.encode(content);
         var senderBuffer = charset.encode(sender);
         var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + senderBuffer.remaining() + contentBuffer.remaining());
@@ -92,14 +92,13 @@ public class Packets {
      *
      * @param sender the sender's login
      * @param content the content of the message
-     * @param opCode the operation code
      * @return a {@code ByteBuffer} in <b>write-mode</b>
      */
-    public static ByteBuffer ofMessageReader(String sender, String content, byte opCode) {
+    public static ByteBuffer ofPublicMessageReceiver(String sender, String content) {
         var contentBuffer = charset.encode(content);
         var expBuffer = charset.encode(sender);
         var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + contentBuffer.remaining() + expBuffer.remaining());
-        result.put(opCode)
+        result.put(GENERAL_RECEIVER)
                 .putInt(expBuffer.remaining())
                 .put(expBuffer)
                 .putInt(contentBuffer.remaining())
@@ -324,35 +323,41 @@ public class Packets {
 
     /**
      * Create a buffer containing the HTTP response.
-     * 
+     *
      * @param name the filename
      * @return a {@code ByteBuffer} in <b>write-mode</b>
      */
-    
+
     public static ByteBuffer ofHTTPResponse(String name) {
         var path = Path.of(name);
-        try (var lines = Files.lines(path)) {
-            var file = lines.reduce("", String::concat);
-            file += "\r\n\r\n";
+        if (Files.exists(path)) {
+            try (var lines = Files.lines(path)) {
+                var file = lines.reduce("", String::concat);
+                file += "\r\n\r\n";
 
-            var ext = getFileExtension(name);
+                var ext = getFileExtension(name);
 
-            var content = ASCII.encode(file);
-            var list = new ArrayList<String>();
-            list.add("HTTP/1.1 200 OK");
-            list.add("Content-Length: " + content.capacity());
-            list.add("Content-Type: " + ext);
-            list.add("");
+                var content = ASCII.encode(file);
+                var list = new ArrayList<String>();
+                list.add("HTTP/1.1 200 OK");
+                list.add("Content-Length: " + content.capacity());
+                list.add("Content-Type: " + ext);
+                list.add("");
 
-            var header = String.join("\r\n", list);
-            var encoded = ASCII.encode(header + "\r\n");
+                var header = String.join("\r\n", list);
+                var encoded = ASCII.encode(header + "\r\n");
 
-            var result = ByteBuffer.allocate(encoded.remaining() + content.remaining());
-            result.put(encoded).put(content);
-            return result;
-        } catch (IOException e) {
-            return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
+                var result = ByteBuffer.allocate(encoded.remaining() + content.remaining());
+                return result.put(encoded).put(content);
+            } catch (IOException e) {
+                return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
+            }
+        } else {
+            var content = ASCII.encode("HTTP/1.1 404 Not found\r\n\r\n\r\n"); // ;-)
+            var result = ByteBuffer.allocate(content.remaining());
+            return result.put(content);
         }
+
     }
 
     private static String getFileExtension(String path) {
@@ -362,4 +367,5 @@ public class Packets {
         }
         return path.substring(lastIndex+1);
     }
+
 }
