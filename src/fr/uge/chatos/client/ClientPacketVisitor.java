@@ -90,8 +90,7 @@ public class ClientPacketVisitor implements PacketVisitor {
 
     @Override
     public void visit(PCData PCData) {
-        // appel client HTTP
-        logger.info("HTTP reçu");
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -111,7 +110,8 @@ public class ClientPacketVisitor implements PacketVisitor {
         } else {
             bb.compact();
             try {
-                HTTPProcessor.processHTTP(bb);
+                System.out.println(client.getRepository());
+                HTTPProcessor.processHTTP(bb, client.getRepository());
             } catch (HTTPException e) {
                 System.out.println("HTTPException encountered with [" + privateFrame.getDst() +"]:\n"+ e.getMessage());
             }

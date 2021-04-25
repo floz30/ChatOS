@@ -21,7 +21,6 @@ public class PrivateFrame implements Packet{
 
     @Override
     public ByteBuffer asByteBuffer() {
-        // TODO Auto-generated method stub
         return bb;
     }
 

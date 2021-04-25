@@ -141,6 +141,7 @@ public class Client {
                         if (pc.getContext().isAuthenticated()) {
                             // si déjà authentifié appel du client http
                             buffer = Packets.ofGETRequest(cmd.content(), serverAddress.getHostName());
+                            System.out.println(repository);
                             System.out.println("authentifié et envoi http");
                         } else {
                             // si en cours d'authentification envoi de la réponse

@@ -38,7 +38,6 @@ public class HTTPReader {
             }
         }
         bb.compact();
-        System.out.println(sb.toString());
         return sb.toString().substring(0, sb.length() - 2);
     }
 

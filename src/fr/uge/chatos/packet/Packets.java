@@ -333,8 +333,9 @@ public class Packets {
                 var content = charset.encode(file);
                 
                 response.add("HTTP/1.1 200 OK");
-                response.add("Content-Length: " + (content.capacity() - 2));
+                response.add("Content-Length: " + content.capacity());
                 response.add("Content-Type: " + ext);
+                
                 
                 var header = ASCII.encode(response.toString());
                 var res = ByteBuffer.allocate(content.capacity() + header.capacity());
@@ -359,7 +360,12 @@ public class Packets {
     public static ByteBuffer ofHTTP(ByteBuffer bb, PrivateFrame privateFrame) {
         var req = ASCII.decode(bb).toString();
         var fn = req.split(" ")[1];
-        var path = Path.of(privateFrame.getRoot() + "/" + fn); // buggera si on lui écris un path genre /src/file.py
+        System.out.println(privateFrame.getRoot());
+        var p = privateFrame.getRoot();
+        if (!p.endsWith("/")) {
+            p+="/";
+        }
+        var path = Path.of(p + fn);
         return findFile(path, fn);
     }
 }
