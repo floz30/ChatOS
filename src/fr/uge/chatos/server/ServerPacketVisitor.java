@@ -8,6 +8,10 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
+/**
+ * Using the visitor pattern, any packet receive from a client will trigger a certain operation.
+ */
+
 public class ServerPacketVisitor implements PacketVisitor {
     private static final Logger logger = Logger.getLogger(ServerPacketVisitor.class.getName());
     private final Server server;
@@ -28,6 +32,9 @@ public class ServerPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Accept or decline the connection request to the server. It will decline if the username is already use by someone else.
+     */
     @Override
     public void visit(ConnectionRequest connectionRequest) {
         var login = connectionRequest.sender;
@@ -38,7 +45,7 @@ public class ServerPacketVisitor implements PacketVisitor {
         } else {
             var error = new ErrorShutdown("The pseudo \"" + login + "\" is already used by someone else.");
             server.privateBroadcast(error, context.getKey());
-            // TODO : fermer la connexion
+            context.silentlyClose();
         }
     }
 
@@ -118,6 +125,12 @@ public class ServerPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Send the packet to the attributed private socket
+     * 
+     * @param data
+     */
+    
     @Override
     public void visit(PCData data) {
         var pcOptional = server.getPrivateConnection(data.getSender(), context.getKey());

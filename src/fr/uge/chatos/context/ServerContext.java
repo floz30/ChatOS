@@ -9,6 +9,11 @@ import fr.uge.chatos.server.ServerPacketVisitor;
 import java.nio.channels.SelectionKey;
 import java.util.Objects;
 
+
+/**
+ * This context contains the server's visitor for a client. The visitor use the received frame to call necessary operation.
+ * 
+ */
 public class ServerContext extends AbstractContext {
     private final ServerPacketVisitor visitor;
     private boolean authenticated;

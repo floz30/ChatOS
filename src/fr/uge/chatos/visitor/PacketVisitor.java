@@ -64,10 +64,6 @@ public interface PacketVisitor {
      */
     void visit(PCAuthConfirmation authConfirmation);
 
-    /**
-     *
-     * @param data
-     */
     void visit(PCData data);
 
     void visit(HttpRequest httpRequest);

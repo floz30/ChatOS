@@ -20,7 +20,8 @@ import java.util.logging.Logger;
 
 
 
-/**
+/** 
+ * Implement a non-blocking TCP client.
  *
  */
 public class Client {

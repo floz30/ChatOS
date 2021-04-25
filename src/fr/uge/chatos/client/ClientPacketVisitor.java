@@ -8,10 +8,12 @@ import fr.uge.chatos.visitor.PacketVisitor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Objects;
-import java.util.logging.Logger;
+
+/**
+ * Using the visitor pattern, any packet receive from the server will trigger a certain operation.
+ */
 
 public class ClientPacketVisitor implements PacketVisitor {
-    private static final Logger logger = Logger.getLogger(ClientPacketVisitor.class.getName());
     private final Client client;
     private final ClientContext context;
 
@@ -20,6 +22,11 @@ public class ClientPacketVisitor implements PacketVisitor {
         this.context = Objects.requireNonNull(context);
     }
 
+    /**
+     * Notice the status of connection request
+     * 
+     */
+    
     @Override
     public void visit(ConnectionConfirmation connectionConfirmation) {
         if (connectionConfirmation.confirm == (byte) 1) {
@@ -45,16 +52,27 @@ public class ClientPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Display the message from a user
+     */
+    
     @Override
     public void visit(PublicMessage publicMessage) {
         System.out.println(publicMessage.sender+ " : " + publicMessage.content);
     }
 
+    /**
+     * Display a private message
+     */
     @Override
     public void visit(PrivateMessage privateMessage) {
         System.out.println("[Message privé de " + privateMessage.sender + "] : " + privateMessage.content);
     }
 
+    /**
+     * Display the exact command for the client in order to accept the private connection
+     */
+    
     @Override
     public void visit(PCRequest PCRequest) {
         PCRequest.sender = PCRequest.recipient; // vu qu'on utilise le même reader que le serveur on doit changer la valeur
@@ -90,17 +108,27 @@ public class ClientPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Prepare the packet containing the GET request
+     * 
+     * @param httpRequest
+     */
+    
     @Override
     public void visit(HttpRequest httpRequest) {
-        //logger.info("HTTP request reçu");
         var path = client.getRepository() + "/" + httpRequest.getFilename();
         var buffer = Packets.ofHTTPResponse(path);
         context.queueMessage(buffer.flip());
     }
 
+    /**
+     * Prepare the packet containing the HTTP header + content
+     * 
+     * @param httpData
+     */
+    
     @Override
     public void visit(HttpData httpData) {
-        //logger.info("HTTP response reçu");
         if (httpData.getHeader().getContentType().equals("txt")) {
             System.out.println("Contenu du fichier : \n\t" + httpData.getBody());
         } else {

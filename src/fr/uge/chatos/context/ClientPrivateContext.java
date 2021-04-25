@@ -10,6 +10,11 @@ import fr.uge.chatos.reader.ClientPacketReader;
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
 
+
+/**
+ * This key attachment allows the finalization of the connection to server on the private port.
+ */
+
 public class ClientPrivateContext extends AbstractContext implements ClientContext {
     private final ClientPacketVisitor visitor;
     private final long id;

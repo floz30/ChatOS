@@ -1,6 +1,5 @@
 package fr.uge.chatos.packet;
 
-import fr.uge.chatos.http.HttpRefillException;
 import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
@@ -26,6 +25,11 @@ public class HttpRequest implements Packet {
         return filename;
     }
 
+    /*
+     * Build a HTTP request 
+     * 
+     */
+    
     public static HttpRequest create(String request, Map<String, String> fields){
         var tokens = request.split(" ");
         var type = tokens[0];

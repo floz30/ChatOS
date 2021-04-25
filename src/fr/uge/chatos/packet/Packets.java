@@ -1,15 +1,12 @@
 package fr.uge.chatos.packet;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.StringJoiner;
-import java.util.stream.Collectors;
 
 import static fr.uge.chatos.utils.OpCode.*;
 
@@ -325,6 +322,13 @@ public class Packets {
         return result;
     }
 
+    /**
+     * Create a buffer containing the HTTP response.
+     * 
+     * @param name the filename
+     * @return a {@code ByteBuffer} in <b>write-mode</b>
+     */
+    
     public static ByteBuffer ofHTTPResponse(String name) {
         var path = Path.of(name);
         try (var lines = Files.lines(path)) {
@@ -333,20 +337,18 @@ public class Packets {
 
             var ext = getFileExtension(name);
 
-            var body = ASCII.encode(file);
+            var content = ASCII.encode(file);
             var list = new ArrayList<String>();
             list.add("HTTP/1.1 200 OK");
-            list.add("Content-Length: " + body.capacity());
+            list.add("Content-Length: " + content.capacity());
             list.add("Content-Type: " + ext);
             list.add("");
-            //list.add(body.toString());
 
-            var content = String.join("\r\n", list);
-            var encoded = ASCII.encode(content + "\r\n");
-            //encoded.flip();
+            var header = String.join("\r\n", list);
+            var encoded = ASCII.encode(header + "\r\n");
 
-            var result = ByteBuffer.allocate(encoded.remaining() + body.remaining());
-            result.put(encoded).put(body);
+            var result = ByteBuffer.allocate(encoded.remaining() + content.remaining());
+            result.put(encoded).put(content);
             return result;
         } catch (IOException e) {
             return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
@@ -360,26 +362,4 @@ public class Packets {
         }
         return path.substring(lastIndex+1);
     }
-
-//    public static ByteBuffer ofHTTP(ByteBuffer bb) {
-//        var req = ASCII.decode(bb).toString();
-//        var fn = req.split(" \r\n")[2].split(".")[1]; //TODO: fichier sans extension
-//
-//        try (var lines = Files.lines(Path.of(privateFrame.getRoot() + fn))) {
-//            var file = lines.reduce("", String::concat); //inshAllah c'est bon (j'ai le fichier en un string)
-//            file += "\r\n";
-//
-//            var content = charset.encode(file);
-//            var response = new StringJoiner("\r\n");
-//            response.add("HTTP/1.1 200 OK");
-//            response.add("Content-Length: " + content.capacity());
-//            response.add("Content-Type: " + fn);
-//
-//            var header = ASCII.encode(response.toString() + "\r\n");
-//            var res = ByteBuffer.allocate(content.capacity() + header.capacity());
-//            return res.put(header).put(content);
-//        } catch (IOException e) {
-//            return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
-//        }
-//    }
 }
