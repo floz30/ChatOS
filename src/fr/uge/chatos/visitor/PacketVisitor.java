@@ -64,17 +64,10 @@ public interface PacketVisitor {
      */
     void visit(PCAuthConfirmation authConfirmation);
 
-    /**
-     * private connection data receive by server.
-     *
-     * @param PCData
-     */
-    void visit(PCData PCData);
-    
-    /**
-     * frame from private connection receive by client.
-     *
-     * @param PrivateFrame
-     */
-    void visit(PrivateFrame request);
+    void visit(PCData data);
+
+    void visit(HttpRequest httpRequest);
+
+    void visit(HttpData httpData);
+
 }

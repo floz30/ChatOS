@@ -8,6 +8,10 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
+/**
+ * Using the visitor pattern, any packet receive from a client will trigger a certain operation.
+ */
+
 public class ServerPacketVisitor implements PacketVisitor {
     private static final Logger logger = Logger.getLogger(ServerPacketVisitor.class.getName());
     private final Server server;
@@ -28,6 +32,9 @@ public class ServerPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Accept or decline the connection request to the server. It will decline if the username is already use by someone else.
+     */
     @Override
     public void visit(ConnectionRequest connectionRequest) {
         var login = connectionRequest.sender;
@@ -38,7 +45,7 @@ public class ServerPacketVisitor implements PacketVisitor {
         } else {
             var error = new ErrorShutdown("The pseudo \"" + login + "\" is already used by someone else.");
             server.privateBroadcast(error, context.getKey());
-            // TODO : fermer la connexion
+            context.silentlyClose();
         }
     }
 
@@ -47,18 +54,28 @@ public class ServerPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Send a message to everyone.
+     */
     @Override
     public void visit(PublicMessage publicMessage) {
         server.publicBroadcast(publicMessage);
         logger.info(publicMessage.sender + " send a public message");
     }
 
+    /**
+     * Send a private message.
+     */
     @Override
     public void visit(PrivateMessage privateMessage) {
         server.privateBroadcast(privateMessage, privateMessage.recipient);
         logger.info(privateMessage.sender + " send a private message to " + privateMessage.recipient);
     }
 
+    /**
+     * Send the private connection request.
+     */
+    
     @Override
     public void visit(PCRequest pcr) {
         pcr.sender = context.getLogin();
@@ -71,6 +88,10 @@ public class ServerPacketVisitor implements PacketVisitor {
         logger.info("Demande de confirmation pour la connexion privée entre : " + pcr.sender + " et " + pcr.recipient);
     }
 
+    /**
+     * Send private connection's id to both user connected by the private port.
+     */
+    
     @Override
     public void visit(PCSockets pcs) {
         pcs.port = server.getPrivatePort();
@@ -89,9 +110,11 @@ public class ServerPacketVisitor implements PacketVisitor {
             server.privateBroadcast(pcs, pcs.recipient);
             logger.info("Envoi de l'identifiant et du numéro de port");
         }
-
     }
 
+    /**
+     * Authentificate both user 
+     */
     @Override
     public void visit(PCAuth pcc) {
         var pcOptional = server.getPrivateConnection(pcc.login, pcc.id);
@@ -118,13 +141,18 @@ public class ServerPacketVisitor implements PacketVisitor {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * Send the packet to the attributed private socket
+     * 
+     * @param data
+     */
+    
     @Override
-    public void visit(PCData PCData) {
-        var pcOptional = server.getPrivateConnection(PCData.getSender(), context.getKey());
+    public void visit(PCData data) {
+        var pcOptional = server.getPrivateConnection(data.getSender(), context.getKey());
         if (pcOptional.isPresent()) {
             var pc = pcOptional.get();
-
-            server.privateConnectionBroadcast(PCData, pc, PCData.getSender());
+            server.privateConnectionBroadcast(data, pc, data.getSender());
             logger.info("Transfert de données sur la connexion privée entre " + pc.getPseudos());
 
         }
@@ -132,7 +160,13 @@ public class ServerPacketVisitor implements PacketVisitor {
     }
 
     @Override
-    public void visit(PrivateFrame request) {
+    public void visit(HttpRequest httpRequest) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public void visit(HttpData httpData) {
+        throw new UnsupportedOperationException();
+    }
+
 }

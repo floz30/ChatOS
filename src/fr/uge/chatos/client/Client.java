@@ -13,8 +13,6 @@ import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.logging.Level;
@@ -23,6 +21,7 @@ import java.util.logging.Logger;
 
 
 /**
+ * Implement a non-blocking TCP client.
  *
  */
 public class Client {
@@ -125,7 +124,7 @@ public class Client {
                     if (cmd.recipient() != null) {
                         buffer = Packets.ofPrivateMessageSender(login, cmd.recipient(), cmd.content()); // message privé
                     } else {
-                        buffer = Packets.ofPublicMessage(login, cmd.content()); // message général
+                        buffer = Packets.ofPublicMessageSender(login, cmd.content()); // message général
                     }
                 } else {
                     // Connexion privée
@@ -140,9 +139,9 @@ public class Client {
                     } else { // sur le port privé
                         if (pc.getContext().isAuthenticated()) {
                             // si déjà authentifié appel du client http
-                            buffer = Packets.ofGETRequest(cmd.content(), serverAddress.getHostName());
-                            System.out.println(repository);
-                            System.out.println("authentifié et envoi http");
+                            buffer = Packets.ofHTTPRequest(cmd.content(), serverAddress.getHostName());
+                            pc.getContext().setFileRequested(cmd.content());
+                            System.out.println("Envoi requête HTTP");
                         } else {
                             // si en cours d'authentification envoi de la réponse
                             buffer = Packets.ofAuthentication(pc.getContext().getId(), login);
@@ -210,6 +209,7 @@ public class Client {
     }
 
     /**
+     * Use the key attachment to either write or read.
      *
      * @param key
      */
@@ -234,10 +234,10 @@ public class Client {
      * Shutdown all private connections and the public one.
      */
     public void shutdown() { // TODO : vérifier le fonctionnement de cette méthode
-        for (var pc : privateConnections.values()) {
-            pc.context.silentlyClose();
-        }
-        silentlyClose(publicKey);
+//        for (var pc : privateConnections.values()) {
+//            pc.context.silentlyClose();
+//        }
+//        silentlyClose(publicKey);
     }
 
     /**

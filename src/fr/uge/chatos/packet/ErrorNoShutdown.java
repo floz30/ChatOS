@@ -5,8 +5,15 @@ import fr.uge.chatos.visitor.PacketVisitor;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
+
+/**
+ * Represent a frame containing a error.
+ *
+ */
 public class ErrorNoShutdown implements Packet {
-    private final String message;
+    private String message;
+
+    public ErrorNoShutdown() { }
 
     public ErrorNoShutdown(String message) {
         this.message = Objects.requireNonNull(message);
@@ -14,6 +21,10 @@ public class ErrorNoShutdown implements Packet {
 
     public String getMessage() {
         return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     @Override

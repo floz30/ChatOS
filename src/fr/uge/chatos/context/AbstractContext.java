@@ -11,6 +11,11 @@ import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
 
+
+/**
+ * This class represent the key attachment in the selector of either the server or the client class.
+ */
+
 class AbstractContext implements Context {
     private static final int MAX_BUFFER_SIZE = 1_024;
     protected final ByteBuffer bufferIn = ByteBuffer.allocateDirect(MAX_BUFFER_SIZE);

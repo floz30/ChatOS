@@ -409,7 +409,9 @@ public class Server {
         if (key != null) {
             var context = (Context) key.attachment();
             context.queueMessage(packet.asByteBuffer());
-        } // TODO : envoyer un paquet d'erreur au client lui indiquant que le pseudo n'existe pas
+        } else {
+            // TODO : envoyer un paquet d'erreur au client lui indiquant que le pseudo n'existe pas
+        }
     }
 
     /**

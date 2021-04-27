@@ -4,6 +4,10 @@ import static fr.uge.chatos.http.HTTPException.ensure;
 
 import java.util.*;
 
+/**
+ * This class collects the information on a HTTP header.
+ */
+
 public class HTTPHeader {
     
     private static final String[] LIST_SUPPORTED_VERSIONS = new String[]{"HTTP/1.1"};

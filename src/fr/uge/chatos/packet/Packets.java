@@ -6,7 +6,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.StringJoiner;
+import java.util.ArrayList;
 
 import static fr.uge.chatos.utils.OpCode.*;
 
@@ -72,7 +72,7 @@ public class Packets {
      * @param content the content of the public message
      * @return a {@code ByteBuffer} in <b>write-mode</b>
      */
-    public static ByteBuffer ofPublicMessage(String sender, String content) {
+    public static ByteBuffer ofPublicMessageSender(String sender, String content) {
         var contentBuffer = charset.encode(content);
         var senderBuffer = charset.encode(sender);
         var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + senderBuffer.remaining() + contentBuffer.remaining());
@@ -92,14 +92,13 @@ public class Packets {
      *
      * @param sender the sender's login
      * @param content the content of the message
-     * @param opCode the operation code
      * @return a {@code ByteBuffer} in <b>write-mode</b>
      */
-    public static ByteBuffer ofMessageReader(String sender, String content, byte opCode) {
+    public static ByteBuffer ofPublicMessageReceiver(String sender, String content) {
         var contentBuffer = charset.encode(content);
         var expBuffer = charset.encode(sender);
         var result = ByteBuffer.allocate(Byte.BYTES + 2*Integer.BYTES + contentBuffer.remaining() + expBuffer.remaining());
-        result.put(opCode)
+        result.put(GENERAL_RECEIVER)
                 .putInt(expBuffer.remaining())
                 .put(expBuffer)
                 .putInt(contentBuffer.remaining())
@@ -308,64 +307,65 @@ public class Packets {
     }
 
     /**
-     * ByteBuffer that contains the GET request
+     * Create a buffer for a HTTP request.
      *
-     * @param fn : filename
-     * @return
+     * @param filename the filename to resquest
+     * @return a {@code ByteBuffer} in <b>write-mode</b>
      */
-    public static ByteBuffer ofGETRequest(String fn, String host) {
-        var request = ASCII.encode("GET " + fn + " HTTP/1.1\r\n"
+    public static ByteBuffer ofHTTPRequest(String filename, String host) {
+        var content = ASCII.encode("GET " + filename + " HTTP/1.1\r\n"
                 + "Host: " + host + "\r\n"
                 + "\r\n");
-        var bb = ByteBuffer.allocate(request.remaining());
-        bb.put(request);
-        return bb;
+        var result = ByteBuffer.allocate(content.remaining());
+        result.put(content);
+        return result;
     }
 
-    private static ByteBuffer findFile(Path path, String fn) {
-        var response = new StringJoiner("\r\n","","\r\n\r\n");
-        
+    /**
+     * Create a buffer containing the HTTP response.
+     *
+     * @param name the filename
+     * @return a {@code ByteBuffer} in <b>write-mode</b>
+     */
+
+    public static ByteBuffer ofHTTPResponse(String name) {
+        var path = Path.of(name);
         if (Files.exists(path)) {
-            var ext = fn.split("\\.")[1]; // TODO: no extension
             try (var lines = Files.lines(path)) {
                 var file = lines.reduce("", String::concat);
-                file += "\r\n";
-                var content = charset.encode(file);
-                
-                response.add("HTTP/1.1 200 OK");
-                response.add("Content-Length: " + content.capacity());
-                response.add("Content-Type: " + ext);
-                
-                
-                var header = ASCII.encode(response.toString());
-                var res = ByteBuffer.allocate(content.capacity() + header.capacity());
-                return res.put(header).put(content);
+                file += "\r\n\r\n";
+
+                var ext = getFileExtension(name);
+
+                var content = ASCII.encode(file);
+                var list = new ArrayList<String>();
+                list.add("HTTP/1.1 200 OK");
+                list.add("Content-Length: " + content.capacity());
+                list.add("Content-Type: " + ext);
+                list.add("");
+
+                var header = String.join("\r\n", list);
+                var encoded = ASCII.encode(header + "\r\n");
+
+                var result = ByteBuffer.allocate(encoded.remaining() + content.remaining());
+                return result.put(encoded).put(content);
             } catch (IOException e) {
                 return ofNoShutdownErrorBuffer("an I/O error occurs opening the file");
             }
         } else {
-            response.add("HTTP/1.1 404 Not Found");
-            var header = ASCII.encode(response.toString());
-            var res = ByteBuffer.allocate(header.capacity());
-            return res.put(header);
+            var content = ASCII.encode("HTTP/1.1 404 Not found\r\n\r\n\r\n"); // ;-)
+            var result = ByteBuffer.allocate(content.remaining());
+            return result.put(content);
         }
+
     }
-    
-    /**
-     * ByteBuffer that contains the reply to the GET request from the client
-     *
-     * @param
-     * @return
-     */
-    public static ByteBuffer ofHTTP(ByteBuffer bb, PrivateFrame privateFrame) {
-        var req = ASCII.decode(bb).toString();
-        var fn = req.split(" ")[1];
-        System.out.println(privateFrame.getRoot());
-        var p = privateFrame.getRoot();
-        if (!p.endsWith("/")) {
-            p+="/";
+
+    private static String getFileExtension(String path) {
+        var lastIndex = path.lastIndexOf(".");
+        if (lastIndex == -1) {
+            return "";
         }
-        var path = Path.of(p + fn);
-        return findFile(path, fn);
+        return path.substring(lastIndex+1);
     }
+
 }

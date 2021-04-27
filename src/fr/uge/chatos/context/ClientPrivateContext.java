@@ -5,17 +5,22 @@ import fr.uge.chatos.client.ClientPacketVisitor;
 import fr.uge.chatos.packet.PCData;
 import fr.uge.chatos.packet.Packet;
 import fr.uge.chatos.packet.Packets;
-import fr.uge.chatos.packet.PrivateFrame;
 import fr.uge.chatos.reader.ClientPacketReader;
 
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
+
+
+/**
+ * This key attachment allows the finalization of the connection to server on the private port.
+ */
 
 public class ClientPrivateContext extends AbstractContext implements ClientContext {
     private final ClientPacketVisitor visitor;
     private final long id;
     private final Client client;
     private boolean authenticated;
+    private String fileRequested;
 
     public ClientPrivateContext(SelectionKey key, Client client, long id) {
         super(key, new ClientPacketReader());
@@ -38,14 +43,12 @@ public class ClientPrivateContext extends AbstractContext implements ClientConte
         return id;
     }
 
-    @Override
-    public void processIn() {
-        if (authenticated) {
-            var dst = client.getPrivateConnection(id).get().getKey();
-            treatPacket(new PrivateFrame(bufferIn, dst, client.getRepository()));
-        } else {
-            super.processIn();
-        }
+    public void setFileRequested(String fileRequested) {
+        this.fileRequested = fileRequested;
+    }
+
+    public String getFileRequested() {
+        return fileRequested;
     }
 
     /**

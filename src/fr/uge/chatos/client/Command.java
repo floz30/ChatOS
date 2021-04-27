@@ -3,7 +3,8 @@ package fr.uge.chatos.client;
 import java.util.Objects;
 
 /**
- *
+ * Transform a message input into this class.
+ * 
  */
 record Command(String recipient, String content, boolean isMessage) {
 

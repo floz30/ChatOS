@@ -4,6 +4,11 @@ import fr.uge.chatos.visitor.PacketVisitor;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represent a frame containing a connection request from the client.
+ * 
+ */
+
 public class ConnectionRequest implements Packet {
     public String sender;
 
